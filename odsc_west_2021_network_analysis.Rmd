@@ -1,0 +1,1794 @@
+---
+title: "ODSC West 2021: Network Analysis"
+author: "Clinton Brownley"
+date: "11/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Install packages
+
+Install [igraph](https://igraph.org/r/) and some additional packages to process and plot the network data.
+
+```{r install_packages, message=FALSE}
+# ,echo=FALSE, include=FALSE
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("ape",
+               "d3r", 
+               "ergm",
+               "ggplot2",
+               "jsonlite", 
+               "tidyverse", 
+               "igraph", 
+               "lubridate",
+               "purrr",
+               "RColorBrewer", 
+               "sand",
+               "sqldf", 
+               "wrapr")
+```
+
+# Load packages
+
+Load [igraph](https://igraph.org/r/) and some additional packages to process and plot the network data.
+
+```{r load_packages, message=FALSE}
+# ,echo=FALSE, include=FALSE
+library("ape")
+library("d3r")
+library("ergm")
+library("ggplot2")
+library("jsonlite")
+library("dplyr")
+library("igraph")
+library("lubridate")
+library("purrr")
+library("RColorBrewer")
+library("readr")
+library("sand")
+library("sqldf")
+library("wrapr")
+```
+
+# Network Analysis
+
+![Lord of the Rings](images/lord_of_the_rings.jpeg)
+
+## Read Data
+
+### Ontology
+
+Read CSV data from the `morethanbooks` [Lord of the Rings Networks](https://github.com/morethanbooks/projects/tree/master/LotR) repository into a [`tibble`](https://tibble.tidyverse.org/).  
+`ontology.csv` contains the basic metadata about each entity (i.e. proper names used to reference characters, places, or groups) together with its identifier (e.g. the identifier for Aragorn is "arag").
+
+```{r ontology}
+ontology = tibble(read.csv(url("https://raw.githubusercontent.com/morethanbooks/projects/master/LotR/ontologies/ontology.csv"), sep = "\t"))
+names(ontology) <- c("id", "type", "label", "freqsum", "subtype", "gender")
+head(ontology)
+```
+
+### Books 1, 2, 3 Combined
+
+Read CSV data from the `morethanbooks` [Lord of the Rings Networks](https://github.com/morethanbooks/projects/tree/master/LotR) repository into a [`tibble`](https://tibble.tidyverse.org/).
+
+`networks-id-3books.csv` contains an edges table with the number of times two entities are mentioned in the same paragraph across all three books of the series.
+
+In this project, the nodes represent entities (i.e. proper names used to reference characters, places, or groups), and two of them are connected by an edge if in any paragraph there are references to these two entities.
+
+Across the three books, Frodo and Sam are referenced in the same paragraph most frequently (533 paragraphs), and Frodo and Gandalf are referenced in the second most number of paragraphs(181 paragraphs).
+
+```{r books123}
+books123 = tibble(read.csv(url("https://raw.githubusercontent.com/morethanbooks/projects/master/LotR/tables/networks-id-3books.csv"), sep = ","))
+books123 <- books123 %>% 
+  dplyr::select("IdSource", "IdTarget", "Weight", "Type") %>% 
+  dplyr::mutate("Type" = "Books 123", 
+                "Weight" = as.double(Weight))
+names(books123) <- c("source", "target", "weight", "volume")
+head(books123)
+```
+
+### Book 1
+
+Read CSV data from the `morethanbooks` [Lord of the Rings Networks](https://github.com/morethanbooks/projects/tree/master/LotR) repository into a [`tibble`](https://tibble.tidyverse.org/).
+
+`networks-id-volume1.csv` contains an edges table with the number of times two entities are mentioned in the same paragraph in [**The Fellowship of the Ring**](https://en.wikipedia.org/wiki/The_Lord_of_the_Rings), published on July 29, 1954.
+
+```{r book1}
+book1 = tibble(read.csv(url("https://raw.githubusercontent.com/morethanbooks/projects/master/LotR/tables/networks-id-volume1.csv"), sep = ","))
+book1 <- book1 %>% 
+  dplyr::select("IdSource", "IdTarget", "Weight", "Type") %>% 
+  dplyr::mutate("Type" = "Book 1", 
+                "Weight" = as.double(Weight))
+names(book1) <- c("source", "target", "weight", "volume")
+book1 <- book1 %>% mutate("title" = "The Fellowship of the Ring", 
+                          "publication_date" = lubridate::ymd("1954-07-29"))
+head(book1)
+```
+
+### Book 2
+
+Read CSV data from the `morethanbooks` [Lord of the Rings Networks](https://github.com/morethanbooks/projects/tree/master/LotR) repository into a [`tibble`](https://tibble.tidyverse.org/).
+
+`networks-id-volume2.csv` contains an edges table with the number of times two entities are mentioned in the same paragraph in [**The Two Towers**](https://en.wikipedia.org/wiki/The_Lord_of_the_Rings), published on November 11, 1954.
+
+```{r book2}
+book2 = tibble(read.csv(url("https://raw.githubusercontent.com/morethanbooks/projects/master/LotR/tables/networks-id-volume2.csv"), sep = ","))
+book2 <- book2 %>% 
+  dplyr::select("IdSource", "IdTarget", "Weight", "Type") %>% 
+  dplyr::mutate("Type" = "Book 2", 
+                "Weight" = as.double(Weight))
+names(book2) <- c("source", "target", "weight", "volume")
+book2 <- book2 %>% mutate("title" = "The Two Towers", 
+                          "publication_date" = lubridate::ymd("1954-11-11"))
+head(book2)
+```
+
+### Book 3
+
+Read CSV data from the `morethanbooks` [Lord of the Rings Networks](https://github.com/morethanbooks/projects/tree/master/LotR) repository into a [`tibble`](https://tibble.tidyverse.org/).
+
+`networks-id-volume3.csv` contains an edges table with the number of times two entities are mentioned in the same paragraph in [**The Return of the King**](https://en.wikipedia.org/wiki/The_Lord_of_the_Rings), published on October 20, 1955.
+
+```{r book3}
+book3 = tibble(read.csv(url("https://raw.githubusercontent.com/morethanbooks/projects/master/LotR/tables/networks-id-volume3.csv"), sep = ","))
+book3 <- book3 %>% 
+  dplyr::select("Source", "Target", "Weight", "Type") %>% 
+  dplyr::mutate("Type" = "Book 3", 
+                "Weight" = as.double(Weight))
+names(book3) <- c("source", "target", "weight", "volume")
+book3 <- book3 %>% mutate("title" = "The Return of the King", 
+                          "publication_date" = lubridate::ymd("1955-10-20"))
+head(book3)
+```
+
+## Create a DataFrame from the `books123` edgelist for an undirected graph
+
+We can use `sqldf` to create a `R` data frame that combines the edges data from `books123` and the metadata about the entities from `ontology`.  The result is a data frame with all of the information we have about the paragraph references to pairs of entities across all three books.
+
+We have undirected data, i.e. a particular person can appear as the source or the target and we're not interested in the distinction (direction), so we can make it easier to get the ego network (the network that is "visible" to a certain person) by duplicating each row with its inverse.  This way, we can group by a single column to get the ego network.
+
+For simplicity in this early cell, and because this processing isn't actually needed for igraph, we don't perform this processing in this cell; however, we do perform it in the next cell to illustrate the difference between these methods.  
+
+Note that in the data frame row filtering shown in this cell we have to search for `Frodo` both as a `source` or as a `target` to select all of the rows (edges) associated with Frodo's ego network.  In the next cell, we will see that conducting the processing in the SQL query will make it easier for us to identify character ego networks.
+
+```{r g_df}
+g_df <- sqldf::sqldf("
+    SELECT 
+      sour.id AS source_id, sour.label as source_name, sour.type AS source_type, sour.subtype AS source_subtype, sour.gender AS source_gender,
+      dest.id AS target_id, dest.label AS target_name, dest.type AS target_type, dest.subtype AS target_subtype, dest.gender AS target_gender,
+      conn.weight, conn.volume
+    FROM 
+      books123 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+)
+
+g_df %>% 
+  dplyr::filter(source_name == "Frodo" | target_name == "Frodo", source_type == "per", target_type == "per") %>%
+  dplyr::arrange(source_id, desc(weight)) %>% 
+  head(10)
+```
+```{r g_df_shape}
+# Number of references (edges) between Frodo and other people across the three books: 38
+g_df %>% 
+  dplyr::filter(source_name == "Frodo" | target_name == "Frodo", source_type == "per", target_type == "per") %>%
+  dim()
+```
+
+## Create a DataFrame with bidirectional edgelists for an undirected graph
+
+We have undirected data, so to make it easier to work with we're going to duplicate each row with its inverse.  This way, we can group by a single column to get the ego network (the network that is "visible" to a certain person).
+
+In contrast to the previous cell, we perform this processing step in the SQL query here to illustrate the difference between these methods.  
+
+Note that in the data frame row filtering shown in this cell we have to search for `Frodo` only in the `source` column to select all of the rows (edges) associated with Frodo's ego network.
+
+Again, this processing isn't actually needed for igraph, we're doing it for manual manipulation of the graph.
+
+```{r network_df}
+network_df <- sqldf::sqldf("
+    SELECT 
+      sour.id AS source_id, sour.label as source_name, sour.type AS source_type, sour.subtype AS source_subtype, sour.gender AS source_gender,
+      dest.id AS target_id, dest.label AS target_name, dest.type AS target_type, dest.subtype AS target_subtype, dest.gender AS target_gender,
+      conn.weight, conn.volume
+    FROM 
+      books123 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id
+
+    UNION 
+
+    SELECT 
+      dest.id AS source_id, dest.label as source_name, dest.type AS source_type, dest.subtype AS source_subtype, dest.gender AS source_gender,
+      sour.id AS target_id, sour.label AS target_name, sour.type AS target_type, sour.subtype AS target_subtype, sour.gender AS target_gender,
+      conn.weight, conn.volume
+    FROM 
+      books123 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+)
+
+network_df %>% 
+  dplyr::filter(source_name == "Frodo", source_type == "per", target_type == "per") %>%
+  dplyr::arrange(source_id, desc(weight)) %>% 
+  head(10)
+```
+
+```{r network_df_shape}
+# Number of references (edges) between Frodo and other people across the three books: 38
+network_df %>% 
+  dplyr::filter(source_name == "Frodo", source_type == "per", target_type == "per") %>%
+  dim()
+```
+
+Filter for pairs of entities that were mentioned in the same paragraph at least twice and then sort by weight and source_id
+
+``` {r weight_gte2}
+# Filter for edges with weights >= 2
+network_df %>% 
+  dplyr::filter(weight >= 2) %>% 
+  dplyr::arrange(weight, source_id) %>% 
+  head(10)
+```
+
+## Check that the same number of source and target nodes were created
+
+``` {r sources_targets_count}
+c( length(unique(network_df$source_id)), length(unique(network_df$target_id)) )
+```
+
+## Count the number of nodes that are: group, person, place, thing
+
+Here, we are interested in the people, so when we create our network graph we will only include the `per` nodes and edges, i.e. the ones associated with people.
+
+``` {r source_type_count}
+network_df %>% group_by(source_type) %>% count()
+```
+
+# Create a network graph of people with edge weights greater than 20
+
+[igraph](https://igraph.org/r/) has many functions for [reading and writing graphs](https://igraph.org/r/html/latest/) and [converting to and from other data formats](https://igraph.org/r/html/latest/).  We can create a network graph `G` from a `R` data frame using igraph's [`graph_from_data_frame`](https://igraph.org/r/html/latest/graph_from_data_frame.html) function.  
+
+A graph `G = (V, E)` is mathematical structure with a set `V` of elements, called vertices or nodes, and a set `E` of pairs of nodes, called edges or links.  A network can be `undirected` or `directed`.  In addition, a network can be `unweighted` or `weighted`.  
+
+To convert the edgelist data in the data frame into a graph `G` using `graph_from_data_frame`, the data frame must contain an edge list representation of a graph, i.e. two columns of node names and zero or more columns of edge attributes.  Each row will be processed as one edge instance.
+
+`d` is a data frame containing a symbolic edge list in the first two columns.  Additional columns are considered as edge attributes.  Since version 0.7 this argument is coerced to a data frame with as.data.frame..
+
+`directed` is a logical scalar, whether or not to create a directed graph.
+
+`vertices` is a data frame with vertex metadata, or NULL.  Since version 0.7 this argument is coerced to a data frame with as.data.frame, if not NULL.
+
+Given our interest in characters, we restrict the graph to references about people.  In addition, we further restrict our attention to pairs of people who are referenced together more than 20 times across all the books to reduce the number of edges such that, for readability, the edge count is not more than four times the node count [[Melancon 06](https://hal-lirmm.ccsd.cnrs.fr/lirmm-00091354/document)].
+
+``` {r create_graph}
+my_edges <- sqldf::sqldf("
+    SELECT 
+      sour.label as source_name, sour.type as source_type, 
+      dest.label AS target_name, dest.type AS target_type, 
+      conn.weight
+    FROM 
+      books123 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+) %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, target_name, weight) %>%
+  dplyr::rename(from = source_name, to = target_name)
+
+my_nodes <- network_df %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, source_type, source_subtype, source_gender, volume) %>% 
+  dplyr::rename(name = source_name, type = source_type, subtype = source_subtype, gender = source_gender) %>%
+  dplyr::distinct()
+
+G <- graph_from_data_frame(my_edges, directed = FALSE, vertices = my_nodes)
+
+#print_all(G)
+G
+```
+
+## Number of nodes
+
+Sometimes the number of vertices (also called nodes) in a graph is called the `order` of the graph.  We can get the number of nodes in a graph with `gorder(G)`.
+
+``` {r G_number_of_nodes}
+# Count the number of nodes
+gorder(G)
+
+vcount(G)
+```
+
+## List of nodes
+
+```{r G_list_of_nodes}
+# List all of the nodes
+V(G)
+```
+
+## List neighbors of a node
+
+```{r G_neighbors_of_Aragorn}
+# List neighbors of node "Aragorn"
+neighbors(G, "Aragorn")
+```
+
+## Determine the degree of each node in the graph
+
+```{r G_degree}
+G_degree <- degree(G)
+
+# Arrange nodes alphabetically
+# G_degree[sort(names(G_degree))]
+
+# Arrange nodes in descending order of degree
+G_degree[order(G_degree, decreasing = TRUE)]
+```
+
+```{r G_degree_distribution}
+G_degree <- degree(G)
+
+# Arrange nodes alphabetically
+# G_degree[sort(names(G_degree))]
+
+# Arrange nodes in descending order of degree
+G_degree_distribution <- G_degree[order(G_degree, decreasing = TRUE)]
+
+# Alternatively: tibble::enframe(G_degree_distribution) # returns columns `name` and `value`
+G_degree_distribution <- data.frame(Character=factor(names(G_degree_distribution)), 
+                                    Degree=G_degree_distribution, 
+                                    row.names=NULL) %>% arrange(desc(Degree))
+
+ggplot(data = G_degree_distribution, aes(x = reorder(Character, -Degree), y = Degree)) +
+  geom_col(aes(fill = Degree)) +
+  scale_color_distiller(palette = "Blues", direction = 1, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 20, 2.5), limits = c(0, 20)) +
+  # ylim(0, 20) +
+  labs(title = "Degree Distribution of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## Determine the average degree of the graph
+
+The average degree of a network is
+
+\begin{align}
+\langle k \rangle = \frac{\sum_{i=1} k_i}{N}
+\end{align}
+
+```{r G_average_degree}
+round(mean(degree(G), na.rm = TRUE), 2)
+```
+
+```{r G_average_degree_calc}
+# The average degree of an undirected network equals 2L / N
+round( 2 * length(E(G)) / length(V(G)), 2)
+```
+
+## Number of edges
+
+Sometimes the number of edges (also called links) in a graph is called the `size` of the graph.  We can get the number of edges in a graph with `ecount(G)`.
+
+``` {r G_number_of_edges}
+# Count the number of edges
+ecount(G)
+```
+
+## List of edges
+
+``` {r G_list_of_edges}
+# List all of the edges
+E(G)
+```
+
+## Determine the density of the graph
+
+The density of a network is the fraction of possible links that actually exist, which is the same as the fraction of pairs of nodes that are actually connected.  The average degree of a network is related (directly proportional) to its density.  The density is the ratio between the average and maximum degree.
+
+The higher the density, the more likely it is that the network is *connected* (i.e. that you can reach any node from any other node by following a path along links and intermediate nodes).
+
+The density of a network with *N* nodes and *L* links is
+
+\begin{align}
+d = \frac{L}{L_{max}}
+\end{align}
+
+In an *undirected* network this equals
+
+\begin{align}
+d = \frac{L}{L_{max}} = \frac{2L}{N(N-1)}
+\end{align}
+
+In a *directed* network this equals 
+
+\begin{align}
+d = \frac{L}{L_{max}} = \frac{L}{N(N-1)}
+\end{align}
+
+```{r G_density}
+round(edge_density(G), 2)
+```
+
+```{r G_density_calc}
+# The density of an undirected network equals 2L / ( N * (N-1) )   
+# Alternatively: 2 * len(G.edges) / len(G.nodes) / (len(G.nodes)-1)
+round( 2 * length(E(G)) / ( length(V(G)) * (length(V(G))-1) ), 2)
+```
+
+## Determine the *length* of the shortest path between two specific nodes
+
+```{r G_shortest_path_distance_two_nodes}
+length(shortest_paths(G, "Frodo", "Arwen", weights = E(G, directed = FALSE)$weight)$vpath[[1]])-1
+```
+
+## Specify the *shortest path* between two specific nodes
+
+```{r G_shortest_path_two_nodes}
+shortest_paths(G, "Frodo", "Arwen", weights = E(G, directed = FALSE)$weight)$vpath[[1]]
+```
+
+## Determine whether the network is connected
+
+A node `j` is *reachable* from another node `i` if there is a walk from from `i` to `j`.  A graph `G` is *connected* if every node is reachable from every other.
+
+```{r G_is_connected}
+is_connected(G)
+```
+
+## Determine the number and size of the connected components
+
+A *connected component* of a graph `G` is a maximally *connected* (i.e. that you can reach any node from any other node by following a path along links and intermediate nodes) subgraph of `G`.
+
+```{r G_connected_components}
+clusters(G)
+```
+
+## Determine the average shortest path length of connected components in the graph
+
+A common measure of the distance between nodes in a network is the minimum number of edges needed to traverse from one node to the other.  This minimum path is called the *shortest path*, and its length is called the *shortest path length*.
+
+We can then define the average shortest path length for the entire network by averaging the shortest path lengths across all pairs of nodes.
+
+```{r G_average_shortest_path_length}
+#round(mean_distance(G), 2)
+
+c( round(mean_distance(induced_subgraph(G, clusters(G)$membership == 1)), 2), 
+   round(mean_distance(induced_subgraph(G, clusters(G)$membership == 2)), 2) )
+```
+
+## Determine the diameter of the connected components in the graph
+
+The *diameter* of a network is the maximum shortest path length across all pairs of nodes.  That is, the length of the longest shortest path in the network.
+
+```{r G_diameter}
+#diameter(G, weights = NA)
+
+c( diameter(induced_subgraph(G, clusters(G)$membership == 1), weights = NA),
+   diameter(induced_subgraph(G, clusters(G)$membership == 2), weights = NA) )
+```
+
+## Determine the average clustering coefficient of the graph
+
+The local clustering of each node in a graph G is the fraction of triangles that actually exist over all possible triangles in its neighborhood. The average clustering coefficient of a graph G is the mean of local clusterings.
+
+```{r G_average_clustering}
+# Global average clustering
+round(transitivity(G, type="average",
+                   vids = NULL, # V(conn_comp),
+                   weights = NULL,
+                   isolates = "zero"), 3)
+```
+
+```{r G_transitivity}
+# Global transitivity (weights nodes with large degree higher than average clustering)
+round(transitivity(G, type="global",
+                   vids = NULL, # V(conn_comp),
+                   weights = NULL,
+                   isolates = "zero"), 3)
+```
+
+## Determine the assortativity of the network based on the *correlation* between degrees of neighbor nodes, as well as a categorical attribute
+
+Nodes (People) in a social network may have a variety of attributes, e.g. age, gender, location, interests, etc.  For example, in our LotR network, we have the attributes `gender` and `subtype` for each person.
+
+In social networks, it's often the case that people who are connected to one another tend to share similar attributes.  For example, in our LotR network, it may be the case that people who are connected to one another tend to be of the same gender or subtype.  This property is called *assortativity*.
+
+*Assortativity* based on `degree` is called degree assortativity, which occurs when high-degree nodes tend to be connected to other high-degree nodes and low-degree nodes tend to be connected to other low-degree nodes.  In addition to `degree`, assortativity can also be based on *categorical* or *numeric* attributes.
+
+```{r G_assortativity_degree}
+# Assortativity of the network based on the correlation between degrees of neighbor nodes
+round(assortativity_degree(G, directed = FALSE), 2)
+```
+
+```{r G_assortativity_attribute}
+# Assortativity of the network based on subtype, a categorical attribute of the nodes
+v_types <- as.numeric(factor(V(G)$subtype))
+round(assortativity_nominal(G, types = v_types, directed = FALSE), 2)
+```
+
+# Add gender and subtype attributes and colors to the nodes
+
+Determine the unique genders in the dataset
+
+``` {r genders}
+genders <- network_df %>% 
+  dplyr::filter(source_type == "per") %>% 
+  dplyr::distinct(source_gender) %>% 
+  dplyr::select(source_gender) %>%
+  dplyr::arrange(source_gender)
+
+genders <- genders$source_gender
+genders
+```
+
+``` {r color_palette}
+# tableau
+color_palette <- brewer.pal(n = 8, name = "Set1") 
+color_palette
+```
+
+Associate the unique genders with colors
+
+``` {r gender_colormap}
+# qc source: https://www.r-bloggers.com/2018/03/r-tip-use-named-vectors-to-re-map-values/
+# tableau: orange, blue
+gender_colormap <- qc( "female" = "#e49444" , "male" = "#5778a4" )  
+gender_colormap 
+```
+
+Determine the unique subtypes in the dataset
+
+``` {r subtypes}
+subtypes <- network_df %>% 
+  dplyr::filter(source_type == "per") %>% 
+  dplyr::distinct(source_subtype) %>% 
+  dplyr::select(source_subtype) %>% 
+  dplyr::arrange(source_subtype)
+
+subtypes <- subtypes$source_subtype
+subtypes
+```
+
+Associate the unique subtypes with colors
+
+``` {r subtype_colormap}
+# tableau: blue, orange, green, red, purple, brown, pink, cyan
+subtype_colormap <- qc( "ainur"  = "#5778a4", 
+                        "animal" = "#e49444", 
+                        "dwarf"  = "#6a9f58", 
+                        "elves"  = "#d1615d", 
+                        "ents"   = "#a87c9f", 
+                        "hobbit" = "#967662", 
+                        "men"    = "#f1a2a9", 
+                        "orcs"   = "#17becf" )
+subtype_colormap 
+```
+
+Create a data frame that associates each node (person) with four new attributes for that person
+
+``` {r map_node_attributes}
+attrs <- network_df %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, source_subtype, source_gender) %>%
+  dplyr::mutate(subtype_color = subtype_colormap[source_subtype], 
+                gender_color  = gender_colormap[source_gender]) %>%
+  dplyr::distinct()
+
+attrs
+```
+
+Assign the attributes to the nodes in the network
+
+``` {r add_node_attributes}
+V(G)$subtype_color <- attrs$subtype_color
+V(G)$gender_color  <- attrs$gender_color
+```
+
+## Check that the attributes were added to the nodes
+
+```{r G_check_node_attributes}
+# V(G)
+
+vertex.attributes(G)
+```
+
+## Check that the undirected edges have weights
+
+```{r G_check_edge_attributes}
+# E(G)
+
+edge.attributes(G)
+```
+
+# Plot the nodes of the LotR network
+
+```{r G_plot_nodes}
+set.seed(10)
+igraph_options(vertex.size=8, 
+               vertex.color="blue", 
+               vertex.frame.color="blue",
+               vertex.label=NA, 
+               edge.color=NA)
+par(mfrow=c(1,1))
+plot(G, layout=layout_randomly)
+title("LotR network (no edges!)")
+```
+
+# Plot the nodes and weighted edges of the LotR network
+
+```{r G_plot_nodes_and_edges}
+e.size <- 8 * E(G)$weight / max( E(G)$weight, na.rm = TRUE )
+
+set.seed(10)
+igraph_options(vertex.size=8, 
+               vertex.color="blue", 
+               vertex.frame.color="blue",
+               vertex.label=NA, 
+               edge.width=e.size, 
+               edge.color="blue")
+par(mfrow=c(1,1))
+plot(G, layout=layout_randomly)
+title("LotR network")
+```
+
+# Create a new network graph that only consists of the largest connected component
+
+## Determine the largest connected component and
+## Create a new network graph that only consists of the largest connected component
+
+```{r largest_connected_component}
+largest_cc <- (clusters(G)$membership == 1)
+
+conn_comp <- induced_subgraph(G, largest_cc)
+conn_comp
+```
+
+## Confirm that the new network graph (conn_comp) is indeed connected
+
+```{r connected_component}
+is_connected(conn_comp)
+```
+
+# Analyze characteristics of the largest connected component of the LotR network
+
+## Number of nodes
+
+Sometimes the number of vertices (also called nodes) in a graph is called the `order` of the graph.  We can get the number of nodes in a graph with `gorder(G)`.
+
+``` {r cc_number_of_nodes}
+# Count the number of nodes
+gorder(conn_comp)
+
+vcount(conn_comp)
+```
+
+## List of nodes
+
+```{r cc_list_of_nodes}
+# List all of the nodes
+V(conn_comp)
+```
+
+## List neighbors of a node
+
+```{r cc_neighbors_of_Aragorn}
+# List neighbors of node "Aragorn"
+neighbors(conn_comp, "Aragorn")
+```
+
+## Determine the degree of each node in the graph
+
+```{r cc_degree}
+cc_degree <- degree(conn_comp)
+
+# Arrange nodes alphabetically
+# cc_degree[sort(names(cc_degree))]
+
+# Arrange nodes in descending order of degree
+cc_degree[order(cc_degree, decreasing = TRUE)]
+```
+
+```{r cc_degree_distribution}
+cc_degree <- degree(conn_comp)
+
+# Arrange nodes alphabetically
+# cc_degree[sort(names(cc_degree))]
+
+# Arrange nodes in descending order of degree
+cc_degree_distribution <- cc_degree[order(cc_degree, decreasing = TRUE)]
+
+# Alternatively: tibble::enframe(cc_degree_distribution) # returns columns `name` and `value`
+cc_degree_distribution <- data.frame(Character=factor(names(cc_degree_distribution)), 
+                                    Degree=cc_degree_distribution, 
+                                    row.names=NULL) %>% arrange(desc(Degree))
+
+ggplot(data = cc_degree_distribution, aes(x = reorder(Character, -Degree), y = Degree)) +
+  geom_col(aes(fill = Degree)) +
+  scale_color_distiller(palette = "Blues", direction = 1, aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 20, 2.5), limits = c(0, 20)) +
+  # ylim(0, 20) +
+  labs(title = "Degree Distribution of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none", 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## Determine the average degree of the graph
+
+The average degree of a network is
+
+\begin{align}
+\langle k \rangle = \frac{\sum_{i=1} k_i}{N}
+\end{align}
+
+```{r cc_average_degree}
+round(mean(degree(conn_comp), na.rm = TRUE), 2)
+```
+
+```{r cc_average_degree_calc}
+# The average degree of an undirected network equals 2L / N
+round( 2 * length(E(conn_comp)) / length(V(conn_comp)), 2)
+```
+
+## Number of edges
+
+Sometimes the number of edges (also called links) in a graph is called the `size` of the graph.  We can get the number of edges in a graph with `ecount(G)`.
+
+``` {r cc_number_of_edges}
+# Count the number of edges
+ecount(conn_comp)
+```
+
+## List of edges
+
+``` {r cc_list_of_edges}
+# List all of the edges
+E(conn_comp)
+```
+
+## Determine the density of the largest connected component
+
+The density of a network is the fraction of possible links that actually exist, which is the same as the fraction of pairs of nodes that are actually connected.  The average degree of a network is related (directly proportional) to its density.  The density is the ratio between the average and maximum degree.  
+
+The higher the density, the more likely it is that the network is *connected* (i.e. that you can reach any node from any other node by following a path along links and intermediate nodes).
+
+The density of a network with *N* nodes and *L* links is
+
+\begin{align}
+d = \frac{L}{L_{max}}
+\end{align}
+
+In an *undirected* network this equals
+
+\begin{align}
+d = \frac{L}{L_{max}} = \frac{2L}{N(N-1)}
+\end{align}
+
+In a *directed* network this equals 
+
+\begin{align}
+d = \frac{L}{L_{max}} = \frac{L}{N(N-1)}
+\end{align}
+
+``` {r cc_density}
+round(edge_density(conn_comp), 2)
+```
+
+```{r cc_density_calc}
+# The density of an undirected network equals 2L / ( N * (N-1) )   
+# Alternatively: 2 * len(conn_comp.edges) / len(conn_comp.nodes) / (len(conn_comp.nodes)-1)
+round( 2 * length(E(conn_comp)) / ( length(V(conn_comp)) * (length(V(conn_comp))-1) ), 2)
+```
+
+## Determine the *length* of the shortest path between two specific nodes
+
+```{r cc_shortest_path_distance_two_nodes}
+length(shortest_paths(conn_comp, "Frodo", "Arwen", weights = E(conn_comp, directed = FALSE)$weight)$vpath[[1]])-1
+```
+
+## Specify the *shortest path* between two specific nodes
+
+```{r cc_shortest_path_two_nodes}
+shortest_paths(conn_comp, "Frodo", "Arwen", weights = E(conn_comp, directed = FALSE)$weight)$vpath[[1]]
+```
+
+## Determine whether the network is connected
+
+A node `j` is *reachable* from another node `i` if there is a walk from from `i` to `j`.  A graph `G` is *connected* if every node is reachable from every other.
+
+```{r cc_is_connected}
+is_connected(conn_comp)
+```
+
+## Determine the number and size of the connected components
+
+A *connected component* of a graph `G` is a maximally *connected* (i.e. that you can reach any node from any other node by following a path along links and intermediate nodes) subgraph of `G`.
+
+```{r cc_connected_components}
+# Count the number of connected components
+clusters(conn_comp)
+```
+
+## Determine the average shortest path length of the largest connected component
+
+A common measure of the distance between nodes in a network is the minimum number of edges needed to traverse from one node to the other.  This minimum path is called the *shortest path*, and its length is called the *shortest path length*.
+
+We can then define the average shortest path length for the entire network by averaging the shortest path lengths across all pairs of nodes.
+
+```{r cc_shortest_path_distance}
+round(mean_distance(conn_comp), 2)
+```
+
+## Determine the diameter of the largest connected component
+
+The *diameter* of a network is the maximum shortest path length across all pairs of nodes.  That is, the length of the longest shortest path in the network.
+
+```{r cc_diameter}
+diameter(conn_comp, weights = NA)
+```
+
+## Determine the average clustering coefficient of the graph
+
+The local clustering of each node in a graph G is the fraction of triangles that actually exist over all possible triangles in its neighborhood. The average clustering coefficient of a graph G is the mean of local clusterings.
+
+```{r cc_average_clustering}
+# Global average clustering
+round(transitivity(conn_comp, type="average",
+                   vids = NULL, # V(conn_comp),
+                   weights = NULL,
+                   isolates = "zero"), 3)
+```
+
+```{r cc_transitivity}
+# Global transitivity (weights nodes with large degree higher than average clustering)
+round(transitivity(conn_comp, type="global",
+                   vids = NULL, # V(conn_comp),
+                   weights = NULL,
+                   isolates = "zero"), 3)
+```
+
+## Determine the assortativity of the connected component based on the *correlation* between degrees of neighbor nodes, as well as a categorical attribute
+
+Nodes (People) in a social network may have a variety of attributes, e.g. age, gender, location, interests, etc.  For example, in our LotR network, we have the attributes `gender` and `subtype` for each person.
+
+In social networks, it's often the case that people who are connected to one another tend to share similar attributes.  For example, in our LotR network, it may be the case that people who are connected to one another tend to be of the same gender or subtype.  This property is called *assortativity*.
+
+*Assortativity* based on `degree` is called degree assortativity, which occurs when high-degree nodes tend to be connected to other high-degree nodes and low-degree nodes tend to be connected to other low-degree nodes.  In addition to `degree`, assortativity can also be based on *categorical* or *numeric* attributes.
+
+```{r cc_assortativity_degree}
+# Assortativity of the connected component based on the correlation between degrees of neighbor nodes
+round(assortativity_degree(conn_comp, directed = FALSE), 2)
+```
+
+```{r cc_assortativity_attribute}
+# Assortativity of the connected component based on subtype, a categorical attribute of the nodes
+v_types <- as.numeric(factor(V(conn_comp)$subtype))
+round(assortativity_nominal(conn_comp, types = v_types, directed = FALSE), 2)
+```
+
+# Analyze the nodes of the largest connected component of the LotR network
+
+With social networks, people are often interested in how "*important*" a particular person is in the network.  There are many measures of "importance".
+
+For instance, in basketball, we might use the number of NBA championships, MVP awards, triple-doubles, points per game, three-pointers, rebounds, assists, etc. to assess "*importance*".
+
+Similar to these sports statistics, there are many measures of "*importance*" in social networks:
+
+- Who has the most connections?  
+- Who is the 'closest' to others in the network?  
+- Who is most often 'between' other pairs of people?  
+- Who is connected to other 'important' people?  That is, who has the highest prestige, or rank?
+
+The point isn't that one of these measures is more important than the others, but rather that each one:
+
+- Captures useful information in a succinct manner
+- Encapsulates different information
+
+As Matthew Jackson notes in [The Human Network](https://web.stanford.edu/~jacksonm/books.html), "Our lives would be simpler if measuring something could always be boiled down to a single statistic.  But part of what makes our lives so interesting is that such unidimensional rankings are generally impossible for many of the things that are most important to understand: lists of rankings end up being both controversial and intriguing".
+
+## Degree centrality
+
+In social networks, the number of connections (relationships) a person has is called the person's "degree".  The associated measure of how central the person is within the network is called the person's "degree centrality".  In [A First Course in Network Science](https://cambridgeuniversitypress.github.io/FirstCourseNetworkScience/), Menczer, Fortunato, and Davis refer to such high-degree nodes as *hubs*.  
+
+People with higher "degree centrality" have a disproportionate presence and influence in the network (e.g. through the phenomenon known as the "[friendship paradox](https://en.wikipedia.org/wiki/Friendship_paradox)" -- that most people have fewer friends than their friends have, on average).
+
+In `igraph`, you can set the `normalized`	argument equal to TRUE to normalize the degree. If TRUE then the result is divided by n-1, where n is the number of vertices in the graph.
+
+```{r cc_degree_centrality}
+V(conn_comp)$degree_centrality <- degree(conn_comp, 
+                                         normalized = TRUE)
+
+as_tibble(vertex.attributes(conn_comp)[c("name", "degree_centrality")]) %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(desc(degree_centrality))
+```
+
+```{r cc_degree_centrality_plot}
+cc_degree_centrality <- degree(conn_comp, 
+                               normalized = TRUE)
+
+# Arrange nodes alphabetically
+# cc_degree_centrality[sort(names(cc_degree_centrality))]
+
+# Arrange nodes in descending order of degree centrality
+cc_degree_centralities <- cc_degree_centrality[order(cc_degree_centrality, decreasing = TRUE)]
+
+# Alternatively: tibble::enframe(cc_degree_centrality) # returns columns `name` and `value`
+cc_degree_centralities <- data.frame(Character=factor(names(cc_degree_centrality)),
+                                     Centrality=cc_degree_centrality,
+                                     row.names=NULL) %>% arrange(desc(Centrality))
+
+ggplot(data = cc_degree_centralities, aes(x = reorder(Character, -Centrality), 
+                                          y = Centrality)) +
+  geom_col(aes(fill = Centrality)) +
+  scale_color_distiller(palette = "Greens", 
+                        direction = 1, 
+                        aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 0.7, 0.1)) +
+  # ylim(0, 1) +
+  labs(title = "Degree Centralities of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## Clustering coefficient (Transitivity)
+
+The clustering coefficient (transitivity) of a node is the fraction of pairs of the node's neighbors that are connected to each other.  In a social network we can rephrase this definition as -- the clustering coefficient for a person is the fraction of pairs of the person's connections that are connected to each other.  The connectivity among neighbors of nodes is an important feature of local structure because it indicates the extent to which the nodes are tightly knit, or clustered.
+
+\begin{align}
+clustering_i = \frac{\tau(i)}{\tau_{max}(i)} = \frac{2\tau(i)}{k_i(k_i - 1)}
+\end{align}
+
+where $\tau(i)$ is the number of triangles involving i.  Nodes with degree k < 2 are excluded when calculating the average clustering coefficient.
+
+By averaging the clustering coefficient across the nodes, we can calculate a clustering coefficient for the entire network.  A low clustering coefficient (near zero) indicates the network has few triangles, whereas a high clustering coefficient indicates it has many triangles.  Social networks tend to have high clustering coefficients.
+
+```{r clustering_coefficient}
+# weights = E(conn_comp, directed = FALSE)$weight,
+V(conn_comp)$clustering_coefficient <- transitivity(conn_comp, 
+                                                    type="local", 
+                                                    vids = NULL, # V(conn_comp), 
+                                                    weights = NULL,
+                                                    isolates = "zero")
+
+as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(desc(clustering_coefficient))
+```
+
+```{r cc_clustering_coefficient_plot}
+# weights = E(conn_comp, directed = FALSE)$weight,
+V(conn_comp)$clustering_coefficient <- transitivity(conn_comp, 
+                                                    type="local", 
+                                                    vids = NULL, 
+                                                    weights = NULL,
+                                                    isolates = "zero")
+
+# Arrange nodes alphabetically
+# as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
+#   arrange(name)
+
+# Arrange nodes in descending order of clustering centrality
+cc_clustering_coefficients <- as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
+  rename(Character = name, Centrality = clustering_coefficient) %>%
+  arrange(desc(Centrality))
+
+ggplot(data = cc_clustering_coefficients, aes(x = reorder(Character, -Centrality), 
+                                              y = Centrality)) +
+  geom_col(aes(fill = Centrality)) +
+  scale_color_distiller(palette = "Reds", 
+                        direction = 1, 
+                        aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 1.0, 0.2), limits = c(0, 1.0)) +
+  # ylim(0, 1.2) +
+  labs(title = "Clustering Centralities of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## Closeness centrality
+
+The closeness centrality of a node is the inverse of the sum of the distances from the node to all the other nodes.
+
+\begin{align}
+closeness_i = \frac{1}{\sum_{j \ne i} l_{ij}} ; 
+\end{align}
+
+Alternatively, by multiplying this definition by N - 1, we discount the network size and make the measure comparable across networks.
+
+\begin{align}
+\bar{closeness_i} = \frac{N - 1}{\sum_{j \ne i} l_{ij}} = \frac{1}{\frac{\sum_{j \ne i} l_{ij}}{(N - 1)}}
+\end{align}
+
+Since the term in the denominator is the average distance from a node to the other nodes, this definition conveys that we can also interpret the node's closeness centrality as the inverse of its average distance.
+
+```{r closeness_centrality}
+# weights = E(conn_comp, directed = FALSE)$weight
+V(conn_comp)$closeness_centrality <- closeness(conn_comp, 
+                                               weights = NA, 
+                                               normalized = TRUE)
+
+as_tibble(vertex.attributes(conn_comp)[c("name", "closeness_centrality")]) %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(desc(closeness_centrality))
+```
+
+```{r cc_closeness_centrality_plot}
+V(conn_comp)$closeness_centrality <- closeness(conn_comp, 
+                                               weights = NA, 
+                                               normalized = TRUE)
+
+# Arrange nodes alphabetically
+# as_tibble(vertex.attributes(conn_comp)[c("name", "closeness_centrality")]) %>%
+#   arrange(name)
+
+# Arrange nodes in descending order of closeness centrality
+cc_closeness_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "closeness_centrality")]) %>%
+  rename(Character = name, Centrality = closeness_centrality) %>%
+  arrange(desc(Centrality))
+
+ggplot(data = cc_closeness_centralities, aes(x = reorder(Character, -Centrality), 
+                                             y = Centrality)) +
+  geom_col(aes(fill = Centrality)) +
+  scale_color_distiller(palette = "Purples", 
+                        direction = 1, 
+                        aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 0.8, 0.1), limits = c(0, 0.8)) +
+  # ylim(0, 0.8) +
+  labs(title = "Closeness Centralities of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## Betweenness centrality
+
+Imagine diffusion processes happening in networks, e.g. information being shared in social networks, products being transported through manufacturing networks, data being transported through communication networks.  Suppose these diffusion processes travel from node to node along shortest paths.  In this situation, a node is more central (has higher betweenness centrality) when more and more of these diffusion processes (shortest paths) pass through the node.
+
+Specifically, a node's betweenness centrality is:
+
+\begin{align}
+betweenness_i = \sum_{h \ne j \ne i} \frac{\sigma_{hj}(i)}{\sigma_{hj}}
+\end{align}
+
+where the sum is over all pairs of nodes h and j, not equal to i or each other.  If no shortest path between h and j goes through i, the contribution of (h, j) to the betweenness of i is 0.  If all shortest paths between h and j go through i, the contribution is 1.
+
+Since the potential contributions come from all pairs of nodes, the betweenness grows with the network size.  To normalize $betweenness_i$ and make the measure comparable across networks, we divide it by ${N - 1 \choose 2}$. 
+
+```{r betweenness_centrality}
+# weights = E(conn_comp, directed = FALSE)$weight,
+V(conn_comp)$betweenness_centrality <- betweenness(conn_comp, 
+                                                   directed = FALSE, 
+                                                   weights = NA, 
+                                                   normalized = TRUE)
+
+as_tibble(vertex.attributes(conn_comp)[c("name", "betweenness_centrality")]) %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(desc(betweenness_centrality))
+```
+
+```{r cc_betweenness_centrality_plot}
+V(conn_comp)$betweenness_centrality <- betweenness(conn_comp, 
+                                                   directed = FALSE, 
+                                                   weights = NA, 
+                                                   normalized = TRUE)
+
+# Arrange nodes alphabetically
+# as_tibble(vertex.attributes(conn_comp)[c("name", "betweenness_centrality")]) %>%
+#   arrange(name)
+
+# Arrange nodes in descending order of betweenness centrality
+cc_betweenness_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "betweenness_centrality")]) %>%
+  rename(Character = name, Centrality = betweenness_centrality) %>%
+  arrange(desc(Centrality))
+
+ggplot(data = cc_betweenness_centralities, aes(x = reorder(Character, -Centrality), 
+                                             y = Centrality)) +
+  geom_col(aes(fill = Centrality)) +
+  scale_color_distiller(palette = "Oranges", 
+                        direction = 1, 
+                        aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 0.35, 0.05), limits = c(0, 0.35)) +
+  # ylim(0, 1) +
+  labs(title = "Betweenness Centralities of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## Eigenvector centrality
+
+Eigenvector centrality is based on the notions of "status" or "prestige" or "rank".  It's based on the idea that a node is more central if its neighbors are more central.  The definitions of this measure are inherently implicit and can be conveyed as eigenvector solutions of linear systems of equations.  
+
+One such definition by Bonacich, in which the centrality of a node is proportional to the sum of the cetnrality of its neighbors, is:
+
+\begin{align}
+\lambda C_i^e(g) = \sum_j g_{ij} C_j^e(g)
+\end{align}
+
+where $C^e(g)$ denotes the eigenvector centrality associated with a network g and $\lambda$ is a proportionality factor.
+
+When the network is undirected and connected, the largest eigenvalue will be simple and its eigenvector will have entries that are all nonzero and share the same sign.  Convention is to report the absolute values of these entries, which will automatically lie between 0 and 1.
+
+```{r eigenvector_centrality}
+# weights = E(conn_comp, directed = FALSE)$weight, 
+V(conn_comp)$eigenvector_centrality <- eigen_centrality(conn_comp,
+                                                        directed = FALSE, 
+                                                        weights = NA,
+                                                        scale = FALSE)$vector # [["vector"]]
+
+as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(desc(eigenvector_centrality))
+```
+
+```{r cc_eigenvector_centrality_plot}
+V(conn_comp)$eigenvector_centrality <- eigen_centrality(conn_comp,
+                                                        directed = FALSE, 
+                                                        weights = NA,
+                                                        scale = FALSE)$vector # [["vector"]]
+
+# Arrange nodes alphabetically
+# as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
+#   arrange(name)
+
+# Arrange nodes in descending order of eigenvector centrality
+cc_eigenvector_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
+  rename(Character = name, Centrality = eigenvector_centrality) %>%
+  arrange(desc(Centrality))
+
+ggplot(data = cc_eigenvector_centralities, aes(x = reorder(Character, -Centrality), 
+                                             y = Centrality)) +
+  geom_col(aes(fill = Centrality)) +
+  scale_color_distiller(palette = "Blues", 
+                        direction = 1, 
+                        aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 0.4, 0.05)) +
+  # ylim(0, 1) +
+  labs(title = "Eigenvector Centralities of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## PageRank
+
+PageRank is an algorithm to compute a centrality measure that attempts to capture the "status" or "prestige" or "rank" of each node by imagining people carrying out modified random walk processes (random surfing plus jumping) for a long time and measuring the fraction of times they visit each node.  Nodes with many paths leading to them are visited more often by random surfers, and therefore have high PageRank.
+
+PageRank can be computed with an iterative approach called the *power method* (although there are newer / alternative methods).  With the *power method*, the PageRank of node *i* at time *t* is the sum of two terms that convey the two ways one can arrive at node *i*:
+
+\begin{align}
+R_t(i) = \frac{\alpha}{N} + (1 - \alpha) \sum_{j \in pred(i)} \frac{R_{t-1}(j)}{k_{out}(j)}
+\end{align}
+
+The first term conveys teleportation to node *i*, which is one of N possible targets of a jump.  The second term conveys how someone can travel along one of the edges to node *i* during the random walk.
+
+The definition is recursive: the PageRank of a node depends on that of its neighbors.  For $\alpha > 0$, PageRank is guaranteed to converge, even in very large networks.
+
+```{r page_rank}
+# weights = E(conn_comp,directed = FALSE)$weight
+V(conn_comp)$pagerank <- page_rank(conn_comp,
+                                   algo = "prpack",
+                                   directed = FALSE,
+                                   damping = 0.9,
+                                   weights = NA)$vector # [["vector"]]
+
+as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank")]) %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(desc(pagerank))
+```
+
+```{r cc_pagerank_centrality_plot}
+V(conn_comp)$pagerank_centrality <- page_rank(conn_comp,
+                                              algo = "prpack",
+                                              directed = FALSE,
+                                              damping = 0.9,
+                                              weights = NA)$vector # [["vector"]]
+
+# Arrange nodes alphabetically
+# as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank_centrality")]) %>%
+#   arrange(name)
+
+# Arrange nodes in descending order of pagerank centrality
+cc_pagerank_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank_centrality")]) %>%
+  rename(Character = name, Centrality = pagerank_centrality) %>%
+  arrange(desc(Centrality))
+
+ggplot(data = cc_pagerank_centralities, aes(x = reorder(Character, -Centrality), 
+                                            y = Centrality)) +
+  geom_col(aes(fill = Centrality)) +
+  scale_color_distiller(palette = "Greys", 
+                        direction = 1, 
+                        aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 0.15, 0.02)) +
+  # ylim(0, 1) +
+  labs(title = "PageRank Centralities of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## Remove attributes, if necessary
+
+```{r remove_attributes}
+# Check attributes
+vertex.attributes(conn_comp)
+
+# Remove specific attributes
+#vertex_attr(conn_comp)["transitivity"] <- NULL
+```
+
+# Plot the nodes and weighted edges of the largest connected LotR network
+# (including the names of the characters)
+
+```{r plot_conn_comp}
+e.size <- 4 * E(conn_comp)$weight / max( E(conn_comp)$weight, na.rm = TRUE )
+v.label <- V(conn_comp)$name
+
+set.seed(10)
+igraph_options(vertex.size=5, 
+               vertex.color="blue", 
+               vertex.frame.color="blue",
+               vertex.label=v.label, 
+               vertex.label.dist=1.1, 
+               vertex.label.cex=0.75, 
+               edge.width=e.size, 
+               edge.color="blue")
+par(mfrow=c(1,1))
+plot(conn_comp, layout=layout_nicely)
+title("LotR network")
+```
+
+# Plot the nodes and edges of the LotR network (color the nodes by gender)
+
+```{r plot_gender}
+e.size <- 4 * E(conn_comp)$weight / max( E(conn_comp)$weight, na.rm = TRUE )
+v.label <- V(conn_comp)$name
+v.color <- V(conn_comp)$gender_color
+
+set.seed(10)
+igraph_options(vertex.size=5, 
+               vertex.color=v.color, 
+               vertex.frame.color=v.color, 
+               vertex.label=v.label, 
+               vertex.label.dist=1.1, 
+               vertex.label.cex=0.75,
+               edge.width=e.size, 
+               edge.color="grey")
+par(mfrow=c(1,1))
+plot(conn_comp, layout=layout_nicely)
+title("LotR network")
+```
+
+## Plot the nodes and edges of the LotR network (color the nodes by subtype)
+
+```{r plot_subtype}
+e.size <- 4 * E(conn_comp)$weight / max( E(conn_comp)$weight, na.rm = TRUE )
+v.label <- V(conn_comp)$name
+v.color <- V(conn_comp)$subtype_color
+
+set.seed(10)
+igraph_options(vertex.size=5, 
+               vertex.color=v.color, 
+               vertex.frame.color=v.color, 
+               vertex.label=v.label, 
+               vertex.label.dist=1.1, 
+               vertex.label.cex=0.75,
+               edge.width=e.size, 
+               edge.color="grey")
+par(mfrow=c(1,1))
+plot(conn_comp, layout=layout_nicely)
+title("LotR network")
+```
+
+## Create a network graph for LotR Book 1
+
+```{r book1_df}
+book1_df <- sqldf::sqldf("
+    SELECT 
+      sour.id AS source_id, sour.label as source_name, sour.type AS source_type, sour.subtype AS source_subtype, sour.gender AS source_gender,
+      dest.id AS target_id, dest.label AS target_name, dest.type AS target_type, dest.subtype AS target_subtype, dest.gender AS target_gender,
+      conn.weight, conn.volume, conn.title, conn.publication_date
+    FROM 
+      book1 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id
+
+    UNION 
+
+    SELECT 
+      dest.id AS source_id, dest.label as source_name, dest.type AS source_type, dest.subtype AS source_subtype, dest.gender AS source_gender,
+      sour.id AS target_id, sour.label AS target_name, sour.type AS target_type, sour.subtype AS target_subtype, sour.gender AS target_gender,
+      conn.weight, conn.volume, conn.title, conn.publication_date
+    FROM 
+      book1 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+)
+
+book1_df %>% 
+  dplyr::mutate("weight" = as.double(weight), 
+                "publication_date" = as.character(publication_date)) %>%
+  dplyr::arrange(desc(weight)) %>% 
+  head(10)
+```
+
+``` {r create_G_book1_graph}
+book1_edges <- sqldf::sqldf("
+    SELECT 
+      sour.label as source_name, sour.type as source_type, 
+      dest.label AS target_name, dest.type AS target_type, 
+      conn.weight
+    FROM 
+      book1 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+) %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, target_name, weight) %>%
+  dplyr::rename(from = source_name, to = target_name)
+
+book1_nodes <- book1_df %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, source_type, source_subtype, source_gender, volume, title, publication_date) %>% 
+  dplyr::mutate(publication_date = as.character(publication_date)) %>%
+  dplyr::rename(name = source_name, type = source_type, subtype = source_subtype, gender = source_gender) %>%
+  dplyr::distinct()
+
+G_book1 <- graph_from_data_frame(book1_edges, directed = FALSE, vertices = book1_nodes)
+
+#print_all(G_book1)
+G_book1
+```
+
+## Check that the attributes were added to the nodes
+
+```{r G_book1_check_node_attributes}
+vertex.attributes(G_book1)
+```
+
+## Check that the undirected edges have weights
+
+```{r G_book1_check_edge_attributes}
+E(G_book1)
+
+edge.attributes(G_book1)
+```
+
+## Identify the largest connected component
+
+```{r G_book1_cc}
+book1_largest_cc <- clusters(G_book1)$membership == 1
+
+G_book1_cc <- induced_subgraph(G_book1, book1_largest_cc)
+G_book1_cc
+```
+
+## Add centrality measures to nodes in the largest connected component
+
+```{r G_book1_cc_node_centralities}
+V(G_book1_cc)$degree_centrality <- degree(G_book1_cc,
+                                          normalized = TRUE)
+
+# weights = E(G_book1_cc, directed = FALSE)$weight,
+V(G_book1_cc)$clustering_centrality <- transitivity(G_book1_cc,
+                                                    type="local",
+                                                    vids = NULL, # V(G_book1_cc),
+                                                    weights = NA,
+                                                    isolates = 'zero')
+
+V(G_book1_cc)$closeness_centrality <- closeness(G_book1_cc,
+                                                weights = NA,
+                                                normalized = TRUE)
+
+V(G_book1_cc)$betweenness_centrality <- betweenness(G_book1_cc,
+                                                    directed = FALSE,
+                                                    weights = NA,
+                                                    normalized = TRUE)
+
+V(G_book1_cc)$eigenvector_centrality <- eigen_centrality(G_book1_cc,
+                                                         directed = FALSE,
+                                                         weights = NA,
+                                                         scale = FALSE)[["vector"]]
+
+V(G_book1_cc)$pagerank_centrality <- page_rank(G_book1_cc, 
+                                               algo = "prpack",
+                                               directed = FALSE,
+                                               damping = 0.9,
+                                               weights = NA)[["vector"]]
+
+vertex.attributes(G_book1_cc)
+```
+
+## Convert G_book1 into JSON
+
+```{r G_book1_json}
+G_book1_json <- d3r::d3_igraph(as.undirected(G_book1_cc))
+G_book1_json
+
+# jsonlite::minify(G_book1_json)
+# jsonlite::prettify(G_book1_json, indent = 4)
+```
+
+## Write G_book1 to JSON
+
+```{r G_book1_write_json}
+write(G_book1_json, file = "data/LotR_Book1_from_R.json")
+```
+
+
+## Create a network graph for LotR Book 2
+
+```{r book2_df}
+book2_df <- sqldf::sqldf("
+    SELECT 
+      sour.id AS source_id, sour.label as source_name, sour.type AS source_type, sour.subtype AS source_subtype, sour.gender AS source_gender,
+      dest.id AS target_id, dest.label AS target_name, dest.type AS target_type, dest.subtype AS target_subtype, dest.gender AS target_gender,
+      conn.weight, conn.volume, conn.title, conn.publication_date
+    FROM 
+      book2 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id
+
+    UNION 
+
+    SELECT 
+      dest.id AS source_id, dest.label as source_name, dest.type AS source_type, dest.subtype AS source_subtype, dest.gender AS source_gender,
+      sour.id AS target_id, sour.label AS target_name, sour.type AS target_type, sour.subtype AS target_subtype, sour.gender AS target_gender,
+      conn.weight, conn.volume, conn.title, conn.publication_date
+    FROM 
+      book2 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+)
+
+book2_df %>% 
+  dplyr::mutate("weight" = as.double(weight), 
+                "publication_date" = as.character(publication_date)) %>%
+  dplyr::arrange(desc(weight)) %>% 
+  head(10)
+```
+
+``` {r create_G_book2_graph}
+book2_edges <- sqldf::sqldf("
+    SELECT 
+      sour.label as source_name, sour.type as source_type, 
+      dest.label AS target_name, dest.type AS target_type, 
+      conn.weight
+    FROM 
+      book2 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+) %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, target_name, weight) %>%
+  dplyr::rename(from = source_name, to = target_name)
+
+book2_nodes <- book2_df %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, source_type, source_subtype, source_gender, volume, title, publication_date) %>% 
+  dplyr::mutate(publication_date = as.character(publication_date)) %>%
+  dplyr::rename(name = source_name, type = source_type, subtype = source_subtype, gender = source_gender) %>%
+  dplyr::distinct()
+
+G_book2 <- graph_from_data_frame(book2_edges, directed = FALSE, vertices = book2_nodes)
+
+#print_all(G_book2)
+G_book2
+```
+
+## Check that the attributes were added to the nodes
+
+```{r G_book2_check_node_attributes}
+vertex.attributes(G_book2)
+```
+
+## Check that the undirected edges have weights
+
+```{r G_book2_check_edge_attributes}
+E(G_book2)
+
+edge.attributes(G_book2)
+```
+
+## Identify the largest connected component
+
+```{r G_book2_cc}
+book2_largest_cc <- clusters(G_book2)$membership == 1
+
+G_book2_cc <- induced_subgraph(G_book2, book2_largest_cc)
+G_book2_cc
+```
+
+## Add centrality measures to nodes in the largest connected component
+
+```{r G_book2_cc_node_centralities}
+V(G_book2_cc)$degree_centrality <- degree(G_book2_cc,
+                                          normalized = TRUE)
+
+# weights = E(G_book2_cc, directed = FALSE)$weight,
+V(G_book2_cc)$clustering_centrality <- transitivity(G_book2_cc,
+                                                    type="local",
+                                                    vids = NULL, # V(G_book1_cc),
+                                                    weights = NA,
+                                                    isolates = 'zero')
+
+V(G_book2_cc)$closeness_centrality <- closeness(G_book2_cc,
+                                                weights = NA,
+                                                normalized = TRUE)
+
+V(G_book2_cc)$betweenness_centrality <- betweenness(G_book2_cc,
+                                                    directed = FALSE,
+                                                    weights = NA,
+                                                    normalized = TRUE)
+
+V(G_book2_cc)$eigenvector_centrality <- eigen_centrality(G_book2_cc,
+                                                         directed = FALSE,
+                                                         weights = NA,
+                                                         scale = FALSE)[["vector"]]
+
+V(G_book2_cc)$pagerank_centrality <- page_rank(G_book2_cc, 
+                                               algo = "prpack",
+                                               directed = FALSE,
+                                               damping = 0.9,
+                                               weights = NA)[["vector"]]
+
+vertex.attributes(G_book2_cc)
+```
+
+## Convert G_book2 into JSON
+
+```{r G_book2_json}
+G_book2_json <- d3r::d3_igraph(as.undirected(G_book2_cc))
+G_book2_json
+
+# jsonlite::minify(G_book2_json)
+# jsonlite::prettify(G_book2_json, indent = 4)
+```
+
+## Write G_book2 to JSON
+
+```{r G_book2_write_json}
+write(G_book2_json, file = "data/LotR_Book2_from_R.json")
+```
+
+
+## Create a network graph for LotR Book 3
+
+```{r book3_df}
+book3_df <- sqldf::sqldf("
+    SELECT 
+      sour.id AS source_id, sour.label as source_name, sour.type AS source_type, sour.subtype AS source_subtype, sour.gender AS source_gender,
+      dest.id AS target_id, dest.label AS target_name, dest.type AS target_type, dest.subtype AS target_subtype, dest.gender AS target_gender,
+      conn.weight, conn.volume, conn.title, conn.publication_date
+    FROM 
+      book3 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id
+
+    UNION 
+
+    SELECT 
+      dest.id AS source_id, dest.label as source_name, dest.type AS source_type, dest.subtype AS source_subtype, dest.gender AS source_gender,
+      sour.id AS target_id, sour.label AS target_name, sour.type AS target_type, sour.subtype AS target_subtype, sour.gender AS target_gender,
+      conn.weight, conn.volume, conn.title, conn.publication_date
+    FROM 
+      book3 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+)
+
+book3_df %>% 
+  dplyr::mutate("weight" = as.double(weight), 
+                "publication_date" = as.character(publication_date)) %>%
+  dplyr::arrange(desc(weight)) %>% 
+  head(10)
+```
+
+``` {r create_G_book3_graph}
+book3_edges <- sqldf::sqldf("
+    SELECT 
+      sour.label as source_name, sour.type as source_type, 
+      dest.label AS target_name, dest.type AS target_type, 
+      conn.weight
+    FROM 
+      book3 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+) %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, target_name, weight) %>%
+  dplyr::rename(from = source_name, to = target_name)
+
+book3_nodes <- book3_df %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, source_type, source_subtype, source_gender, volume, title, publication_date) %>% 
+  dplyr::mutate(publication_date = as.character(publication_date)) %>%
+  dplyr::rename(name = source_name, type = source_type, subtype = source_subtype, gender = source_gender) %>%
+  dplyr::distinct()
+
+G_book3 <- graph_from_data_frame(book3_edges, directed = FALSE, vertices = book3_nodes)
+
+#print_all(G_book3)
+G_book3
+```
+
+## Check that the attributes were added to the nodes
+
+```{r G_book3_check_node_attributes}
+vertex.attributes(G_book3)
+```
+
+## Check that the undirected edges have weights
+
+```{r G_book3_check_edge_attributes}
+E(G_book3)
+
+edge.attributes(G_book3)
+```
+
+## Identify the largest connected component
+
+```{r G_book3_cc}
+book3_largest_cc <- clusters(G_book3)$membership == 1
+
+G_book3_cc <- induced_subgraph(G_book3, book3_largest_cc)
+G_book3_cc
+```
+
+## Add centrality measures to nodes in the largest connected component
+
+```{r G_book3_cc_node_centralities}
+V(G_book3_cc)$degree_centrality <- degree(G_book3_cc,
+                                          normalized = TRUE)
+
+# weights = E(G_book3_cc, directed = FALSE)$weight,
+V(G_book3_cc)$clustering_centrality <- transitivity(G_book3_cc,
+                                                    type="local",
+                                                    vids = NULL, # V(G_book1_cc),
+                                                    weights = NA,
+                                                    isolates = 'zero')
+
+V(G_book3_cc)$closeness_centrality <- closeness(G_book3_cc,
+                                                weights = NA,
+                                                normalized = TRUE)
+
+V(G_book3_cc)$betweenness_centrality <- betweenness(G_book3_cc,
+                                                    directed = FALSE,
+                                                    weights = NA,
+                                                    normalized = TRUE)
+
+V(G_book3_cc)$eigenvector_centrality <- eigen_centrality(G_book3_cc,
+                                                         directed = FALSE,
+                                                         weights = NA,
+                                                         scale = FALSE)[["vector"]]
+
+V(G_book3_cc)$pagerank_centrality <- page_rank(G_book3_cc, 
+                                               algo = "prpack",
+                                               directed = FALSE,
+                                               damping = 0.9,
+                                               weights = NA)[["vector"]]
+
+vertex.attributes(G_book3_cc)
+```
+
+## Convert G_book3 into JSON
+
+```{r G_book3_json}
+G_book3_json <- d3r::d3_igraph(as.undirected(G_book3_cc))
+G_book3_json
+
+# jsonlite::minify(G_book3_json)
+# jsonlite::prettify(G_book3_json, indent = 4)
+```
+
+## Write G_book3 to JSON
+
+```{r G_book3_write_json}
+write(G_book3_json, file = "data/LotR_Book3_from_R.json")
+```
+
+# References
+
+1. Filippo Menczer, Santo Fortunato, and Clayton Davis. [A First Course in Network Science](https://cambridgeuniversitypress.github.io/FirstCourseNetworkScience/). Cambridge University Press, 2020.
+
+2. Eric Kolaczyk and Gabor Csardi. [Statistical Analysis of Network Data with R, 2nd Edition](https://github.com/kolaczyk/sand). Springer, 2020.
+
+3. Mark Newman. [Networks, 2nd Edition](https://www.amazon.com/Networks-Mark-Newman-dp-0198805098/dp/0198805098/). Oxford University Press, 2018.
+
+4. Matthew Jackson. [Social and Economic Networks](https://www.coursera.org/learn/social-economic-networks). Princeton University Press, 2008.
+
+5. Matthew Jackson. [The Human Network: How Your Social Position Determines Your Power, Beliefs, and Behaviors](https://web.stanford.edu/~jacksonm/books.html). Vintage Books, 2020.
+
+6. David Easley and Jon Kleinberg. [Networks, Crowds, and Markets: Reasoning about a Highly Connected World](https://www.cs.cornell.edu/home/kleinber/networks-book/). Cambridge University Press, 2010.

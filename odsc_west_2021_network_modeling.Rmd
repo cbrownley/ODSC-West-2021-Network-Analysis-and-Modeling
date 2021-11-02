@@ -1,0 +1,583 @@
+---
+title: "ODSC West 2021: Network Modeling"
+author: "Clinton Brownley"
+date: "11/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Install packages
+
+Install [`sand`](https://github.com/kolaczyk/sand) and some additional packages to process and model the network data.
+
+```{r install_packages, message=FALSE}
+# ,echo=FALSE, include=FALSE
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("ape",
+               "d3r", 
+               "ergm",
+               "ggplot2",
+               "jsonlite", 
+               "tidyverse", 
+               "igraph", 
+               "lubridate",
+               "purrr",
+               "RColorBrewer", 
+               "sand",
+               "sqldf", 
+               "wrapr")
+```
+
+# Load packages
+
+Load [`sand`](https://github.com/kolaczyk/sand) and some additional packages to process and model the network data.
+
+```{r load_packages, message=FALSE}
+# ,echo=FALSE, include=FALSE
+library("ape")
+library("d3r")
+library("ergm")
+library("ggplot2")
+library("jsonlite")
+library("dplyr")
+library("igraph")
+library("lubridate")
+library("purrr")
+library("RColorBrewer")
+library("readr")
+library("sand")
+library("sqldf")
+library("wrapr")
+```
+
+# Network Modeling
+
+![Lord of the Rings](images/lord_of_the_rings.jpeg)
+
+## Read Data
+
+### Ontology
+
+Read CSV data from the `morethanbooks` [Lord of the Rings Networks](https://github.com/morethanbooks/projects/tree/master/LotR) repository into a [`tibble`](https://tibble.tidyverse.org/).  
+`ontology.csv` contains the basic metadata about each entity (i.e. proper names used to reference characters, places, or groups) together with its identifier (e.g. the identifier for Aragorn is "arag").
+
+```{r ontology}
+ontology = tibble(read.csv(url("https://raw.githubusercontent.com/morethanbooks/projects/master/LotR/ontologies/ontology.csv"), sep = "\t"))
+names(ontology) <- c("id", "type", "label", "freqsum", "subtype", "gender")
+head(ontology)
+```
+
+### Books 1, 2, 3 Combined
+
+Read CSV data from the `morethanbooks` [Lord of the Rings Networks](https://github.com/morethanbooks/projects/tree/master/LotR) repository into a [`tibble`](https://tibble.tidyverse.org/).
+
+`networks-id-3books.csv` contains an edges table with the number of times two entities are mentioned in the same paragraph across all three books of the series.
+
+In this project, the nodes represent entities (i.e. proper names used to reference characters, places, or groups), and two of them are connected by an edge if in any paragraph there are references to these two entities.
+
+Across the three books, Frodo and Sam are referenced in the same paragraph most frequently (533 paragraphs), and Frodo and Gandalf are referenced in the second most number of paragraphs(181 paragraphs).
+
+```{r books123}
+books123 = tibble(read.csv(url("https://raw.githubusercontent.com/morethanbooks/projects/master/LotR/tables/networks-id-3books.csv"), sep = ","))
+books123 <- books123 %>% 
+  dplyr::select("IdSource", "IdTarget", "Weight", "Type") %>% 
+  dplyr::mutate("Type" = "Books 123", 
+                "Weight" = as.double(Weight))
+names(books123) <- c("source", "target", "weight", "volume")
+head(books123)
+```
+
+## Create a DataFrame from the `books123` edgelist for an undirected graph
+
+We can use `sqldf` to create a `R` data frame that combines the edges data from `books123` and the metadata about the entities from `ontology`.  The result is a data frame with all of the information we have about the paragraph references to pairs of entities across all three books.
+
+```{r g_df}
+network_df <- sqldf::sqldf("
+    SELECT 
+      sour.id AS source_id, sour.label as source_name, sour.type AS source_type, sour.subtype AS source_subtype, sour.gender AS source_gender,
+      dest.id AS target_id, dest.label AS target_name, dest.type AS target_type, dest.subtype AS target_subtype, dest.gender AS target_gender,
+      conn.weight, conn.volume
+    FROM 
+      books123 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id
+
+    UNION 
+
+    SELECT 
+      dest.id AS source_id, dest.label as source_name, dest.type AS source_type, dest.subtype AS source_subtype, dest.gender AS source_gender,
+      sour.id AS target_id, sour.label AS target_name, sour.type AS target_type, sour.subtype AS target_subtype, sour.gender AS target_gender,
+      conn.weight, conn.volume
+    FROM 
+      books123 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+)
+
+network_df %>% 
+  dplyr::filter(source_name == "Frodo" | target_name == "Frodo", source_type == "per", target_type == "per") %>%
+  dplyr::arrange(source_id, desc(weight)) %>% 
+  head(10)
+```
+
+## Create a network graph of people with edge weights greater than 20
+
+[igraph](https://igraph.org/r/) has many functions for [reading and writing graphs](https://igraph.org/r/html/latest/) and [converting to and from other data formats](https://igraph.org/r/html/latest/).  We can create a network graph `G` from a `R` data frame using igraph's [`graph_from_data_frame`](https://igraph.org/r/html/latest/graph_from_data_frame.html) function.
+
+``` {r create_graph}
+my_edges <- sqldf::sqldf("
+    SELECT 
+      sour.label as source_name, sour.type as source_type, 
+      dest.label AS target_name, dest.type AS target_type, 
+      conn.weight
+    FROM 
+      books123 conn 
+      JOIN ontology sour
+      ON
+        conn.source = sour.id
+      JOIN ontology dest
+      ON  
+        conn.target = dest.id"
+) %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, target_name, weight) %>%
+  dplyr::rename(from = source_name, to = target_name)
+
+my_nodes <- network_df %>% 
+  dplyr::filter(source_type == "per", target_type == "per", weight > 20) %>%
+  dplyr::select(source_name, source_type, source_subtype, source_gender, volume) %>% 
+  dplyr::rename(name = source_name, type = source_type, subtype = source_subtype, gender = source_gender) %>%
+  dplyr::distinct()
+
+G <- graph_from_data_frame(my_edges, directed = FALSE, vertices = my_nodes)
+
+#print_all(G)
+G
+```
+
+### Check that the attributes were added to the nodes
+
+``` {r check_node_attributes}
+vertex.attributes(G)
+```
+
+# Statistical Analysis of Network Data with R, 2nd Edition, by Kolaczyk and Csardi
+
+The following analyses are adapted from the book, [Statistical Analysis of Network Data with R, 2nd Edition](https://github.com/kolaczyk/sand), by Eric Kolaczyk and Gabor Csardi, to analyze the LotR network.
+
+![Statistical Analysis of Network Data with R, 2nd Edition](images/sand_R.jpg)
+
+## Partitioning the `LotR` Network into Communities
+
+Using an agglomerative hierarchical clustering algorithm, implemented in `igraph` as `cluster_fast_greedy`, to determine the number of communities in the network, we identify 6 communities in the `LotR` network.
+
+```{r lotr_communities}
+# Identify communities in the network using an agglomerative hierarchical clustering algorithm
+lotr_c <- cluster_fast_greedy(G, weights = NULL)
+
+str(lotr_c)
+
+lotr_c[ 1:length(lotr_c) ]
+
+lotr_c
+```
+
+```{r lotr_number_of_communities}
+# Number of communities
+length(lotr_c)
+```
+
+```{r lotr_sizes_of_communities}
+# Number of nodes (people) in each of the communities
+sizes(lotr_c)
+```
+
+```{r lotr_membership_of_communities}
+# Display the community numbers and the nodes (people) in each of the communities
+membership(lotr_c)
+```
+
+```{r lotr_communities_plot}
+# Display the community designations
+# shown in membership(lotr_c)
+par(mfrow=c(1,1), mar=c(0,0,1,0))
+plot(lotr_c, G)
+title("Partitioning of the LotR network into communities")
+```
+
+```{r lotr_communities_dendrogram}
+par(mar=c(0,0,1,0))
+dendPlot(lotr_c, mode = "phylo")
+title("Dendrogram of communities in the LotR network")
+```
+
+## Assessing the Number of Communities in a Network 
+
+We identified 6 communities in the `LotR` network using an agglomerative hierarchical clustering algorithm.  Is this number of communities unexpected or unusual?  To assess whether this number of communities is unusual, let's compare this empirical outcome to the number of communities we find in random graphs that have similar properties to the `LotR` network:
+
+1) Graphs that have the same number of nodes (31) and edges (79) as the `LotR` network
+
+2) Graphs that have the further restriction that they have the same degree distribution as the `LotR` network
+
+Using Monte Carlo methods, we can assess whether the number of communities we identified in the `LotR` network is unusual or to be expected by comparing it to the number of communities we identify in random graphs with similar properties.
+
+```{r compare_number_of_communities}
+# Number of nodes
+nv <- vcount(G)
+# Number of edges
+ne <- ecount(G)
+
+# Calculate the degree of each node
+degs <- degree(G)
+
+# Number of MC trials
+ntrials <- 1000
+
+# Calculate the number of communities across 1000 "G(n,m)" random graphs
+num.comm.rg <- numeric(ntrials)
+for(i in (1:ntrials)){
+   g.rg <- sample_gnm(nv, ne) # Returns a G(n,m) random graph
+   c.rg <- cluster_fast_greedy(g.rg, weights = NULL)
+   num.comm.rg[i] <- length(c.rg)
+}
+
+# Calculate the number of communities across 1000
+# "G(n,m) + same degree distribution" random graphs
+num.comm.grg <- numeric(ntrials)
+for(i in (1:ntrials)){
+   g.grg <- sample_degseq(degs, method="vl") # Returns G(n,m) + same degree dist
+   c.grg <- cluster_fast_greedy(g.grg, weights = NULL)
+   num.comm.grg[i] <- length(c.grg)
+}
+
+# Calculate the proportion of trials with each Number of Communities
+# both for the Fixed Size graphs and the Fixed Degree Sequence graphs
+rslts <- c(num.comm.rg,num.comm.grg)
+indx <- c(rep(0, ntrials), rep(1, ntrials))
+freqs <- table(indx, rslts)/ntrials
+
+# Plot the proportion of trials with each Number of Communities
+# both for the Fixed Size graphs and the Fixed Degree Sequence graphs
+barplot(freqs, beside=TRUE, col=c("steelblue", "darkorange"),
+   xlab="Number of Communities",
+   ylab="Relative Frequency",
+  legend=c("Fixed Size", "Fixed Degree Sequence"))
+```
+
+Based on this analysis, the number of communities we identified in the `LotR` network (**6**) is slightly unusual compared to the number we would expect to find based on random graphs with similar properties.  The results suggest there are likely additional processes at work in the `LotR` network that go beyond simply the density and distribution of social interactions in the network.
+
+## Assessing Small World Properties of a Network
+
+A typical approach to assessing small-world properties is to compare the observed clustering coefficient and average (shortest) path length in an observed network to what might be observed in an appropriately calibrated random graph.  Under such a comparison, if the observed network exhibits small-world properties, we should expect to see that the observed clustering coefficient exceeds that of a random graph, while the average path length remains roughly the same.
+
+```{r small_world_properties}
+# Number of nodes
+nv <- vcount(G)
+# Number of edges
+ne <- ecount(G)
+
+# Number of MC trials
+ntrials <- 1000
+
+# Calculate global transitivity and average path length
+# for connected "G(n,m)" random graphs
+cl.rg <- numeric(ntrials)
+apl.rg <- numeric(ntrials) 
+for(i in (1:ntrials)){
+   g.rg <- sample_gnm(nv, ne)
+   cl.rg[i] <- transitivity(g.rg, type = "globalundirected", weights = NULL)
+   apl.rg[i] <- mean_distance(g.rg, directed = FALSE, unconnected = FALSE)
+}
+
+# Global transitivity: random graph
+round(summary(cl.rg), 3)
+
+# Global transitivity: LotR network
+round(transitivity(G), 3)
+
+# Average path length: random graph
+round(summary(apl.rg), 3)
+
+# Average path length: LotR network
+round(mean_distance(G), 3)
+```
+
+Here we find that the observed `LotR` network exhibits small-world properties, namely, the observed clustering coefficient (0.45) exceeds that of a random graph, while the average path length (2.13) remains roughly the same.
+
+## Exponential Random Graph Models (ERGMs)
+
+Exponential Random Graph Models (ERGMs) are a general class of models based in exponential-family theory, analogous to classical generalized linear models (GLMs), for specifying the probability distribution for a set of random graphs or networks.  Like GLMs, ERGMs are flexible -- for instance, it's possible to include variables representing features like homophily, triad effects, and a range of other features of interest, such as the attributes of people in a social network.  However, some of the theoretical frameworks underlying GLMs hasn't been formally justified for ERGMs, so they should be used and interpreted carefully.
+
+The general form of the model specifies the probability of the entire network, as a function of terms that represent network features we hypothesize may occur more or less likely than expected by chance.  The general form of the model can be written as:
+
+\begin{align}
+P(Y = y) = \frac{\exp(\theta g(y))}{k(\theta)}
+\end{align}
+
+where
+- Y is the random variable for the state of the network
+- g(y) is a vector of model statistics (network "covariates") for network y
+- $\theta$ is a vector of coefficients for the statistics
+- $k(\theta)$ is a normalization constant
+
+The ERGM expression for the probability of the entire graph, shown above, can be re-expressed in terms of the conditional log-odds of a single tie between two actors.  $\theta$ can be interpreted as that term’s contribution to the log-odds of an individual tie, conditional on all other dyads remaining the same. The coefficient for each term in the model is multiplied by the number of configurations that tie will create (or remove) for that specific term.
+
+## ERGM Models
+
+The [`ergm`](https://github.com/statnet/ergm) package, part of the [`statnet`](http://statnet.org/) suite of packages for network analysis, provides an integrated set of tools to analyze and simulate networks based on ERGMs.  The `ergm` package uses the `network` package to store network data as `network` objects, so we need to convert our `igraph` object into a `network` object.  The first step is to separate our graph into an adjacency matrix and a `tibble` of node attributes.
+
+```{r prepare_lotr}
+# Identify the largest connected component of the LotR network
+largest_cc <- (clusters(G)$membership == 1)
+conn_comp <- induced_subgraph(G, largest_cc)
+
+# Remove animal and ents characters from the connected component
+conn_comp <- delete.vertices(conn_comp, 
+                             V(conn_comp)[!subtype %in% c("men", "hobbit", "elves", "dwarf", "ainur")])
+
+# Convert igraph object into an adjacency matrix
+A <- as_adjacency_matrix(conn_comp)
+
+# Specify levels for the Gender and Subtype attributes
+v.attrs <- as_tibble(igraph::get.data.frame(conn_comp, what = "vertices")) %>%
+  dplyr::filter(subtype %in% c("men", "hobbit", "elves", "dwarf", "ainur")) %>%
+  mutate(gender  = as.numeric(factor(gender,  
+                                     levels = c("male", "female"))),
+         subtype = as.numeric(factor(subtype, 
+                                     levels = c("men", "hobbit", "elves", "dwarf", "ainur")))
+        )
+
+# Display the node attributes of the connected component
+vertex.attributes(conn_comp)
+
+# Levels: female male
+factor(get.vertex.attribute(conn_comp, "gender"), 
+       levels = c("male", "female"))
+as.numeric(factor(get.vertex.attribute(conn_comp, "gender")), 
+           levels = c("male", "female"))
+
+# Levels: ainur animal dwarf elves ents hobbit men
+factor(get.vertex.attribute(conn_comp, "subtype"), 
+       levels = c("men", "hobbit", "elves", "dwarf", "ainur"))
+as.numeric(factor(get.vertex.attribute(conn_comp, "subtype"), 
+                  levels = c("men", "hobbit", "elves", "dwarf", "ainur")))
+```
+
+Create a network object for `ergm`.  Add `Gender` and `Subtype` attributes to the nodes.
+
+```{r transform_lotr}
+lotr.s <- network::as.network(as.matrix(A), directed=FALSE)
+
+network::set.vertex.attribute(lotr.s, "Gender", v.attrs$gender)
+
+network::set.vertex.attribute(lotr.s, "Subtype", v.attrs$subtype)
+
+lotr.s
+```
+
+Plot the nodes of the LotR network (color nodes by `Subtype`).
+
+```{r plot_lotr_network}
+set.seed(13)
+par(mfrow=c(1,1), mar=c(0,0,1,0))
+plot(lotr.s, 
+     main="LotR Network", 
+     cex.main=0.9, 
+     label=network.vertex.names(lotr.s),
+     vertex.col='Subtype')
+```
+
+### [A simple Bernoulli ("Erdos/Renyi") model](http://statnet.org/Workshops/ergm_tutorial.html)
+
+The syntax for specifying a model in the `ergm` package follows `R`’s formula convention:
+
+`my.network ∼ my.vector.of.model.terms`
+
+This syntax is used for both the `summary` and `ergm` functions. The `summary` function simply returns the numerical values of the network statistics in the model. The `ergm` function estimates the model with those statistics.
+
+```{r lotr_simple_model, message=FALSE}
+# View the g(y) statistic for this model
+summary(lotr.s ~ edges)
+
+# Fit the model
+lotr.bern <- ergm(lotr.s ~ edges)
+
+# View the fitted model object
+summary(lotr.bern)
+```
+
+This simple model specifies a single homogeneous probability for all ties, which is captured by the coefficient of the `edges` term. We can interpret this coefficient by returning to the logit form of the ERGM. The log-odds that a tie is present is
+
+logit(p(y)) = $\theta \times \delta(g(y))$
+
+= -1.28 $\times$ change in the number of ties
+
+= -1.28 $\times$ 1
+
+for every tie, since the addition of any tie to the network always increases the total number of ties by 1.
+
+The corresponding probability is obtained by taking the expit, or inverse logit, of $\theta$:
+
+= exp(-1.28) / (1 + exp(-1.28)) = 0.218
+
+```{r lotr_simple_model_plogis}
+plogis(coef(lotr.bern))
+```
+
+This probability corresponds to the density we observe in the `LotR` network: there are 71 ties and $26 \choose 2$ = ($26 \times 25$) = 325 dyads, so the probability of a tie is 71 / 325 = 0.218.
+
+### [Nodal covariate: Homophily](http://statnet.org/Workshops/ergm_tutorial.html)
+
+Subtype may be associated with the connections in this network.  We can use `ergm` to test this.  Subtype is a discrete attribute, so we use the ergm-term `nodematch` to investigate homophily in connections by Subtype.
+
+```{r lotr_specify_homophily_model}
+# Frequencies of Subtype
+table(lotr.s %v% "Subtype")
+
+
+# View ties between Subtype categories
+mixingmatrix(lotr.s, "Subtype")
+
+
+# View the g(y) statistic for this model
+# When diff=FALSE, this term adds one network statistic to the model, 
+# which counts the number of edges (i,j) for which attr(i)==attr(j). 
+# This is also called ”uniform homophily,” because each group is assumed 
+# to have the same propensity for within-group ties.
+set.seed(619)
+summary(lotr.s ~ edges + 
+          nodefactor("Subtype") + 
+          nodematch("Subtype", diff=FALSE))
+```
+
+Here we fit the model with the `ergm` function.
+
+```{r lotr_fit_homophily_model_and_view_results, message=FALSE}
+# Fit the model
+# When diff=FALSE, this term adds one network statistic to the model, 
+# which counts the number of edges (i,j) for which attr(i)==attr(j). 
+# This is also called ”uniform homophily,” because each group is assumed 
+# to have the same propensity for within-group ties.
+set.seed(619)
+lotr.hom.formula <- formula(lotr.s ~ edges + 
+                              nodefactor("Subtype") + 
+                              nodematch("Subtype", diff=FALSE)) #levels=-c(2,5)
+
+lotr.homophily <- ergm(lotr.hom.formula) #control=control.ergm(MCMLE.maxit = 30)
+
+# View the model results
+summary(lotr.homophily)
+```
+
+By exponentiating the coefficients, they can be interpreted as a conditional log-odds ratio for interaction (ties) between people in the LotR network.  For example, being Hobbit rather than Men increases the odds of interaction by a factor of exp(1.0137) $\approx$ 2.76, or over 175% ("all else being equal").  Similarly, being of the same Subtype increases the odds of interaction by a factor of exp(1.275) $\approx$ 3.58, or over 250%.
+
+```{r lotr_homophily_model_coefficients}
+# Subtype levels: men hobbit elves dwarf ainur
+
+# Exponentiate the coefficients (conditional log-odds)
+exp(coef(lotr.homophily))
+
+# Inverse-logit the coefficients (conditional probabilities)
+plogis(coef(lotr.homophily))
+```
+
+The analysis of variance (ANOVA) table indicates that there is strong evidence that the variables used in the model explain the variation in network connectivity, with a decrease in residual deviance from 451 to 312 with only six variables.
+
+```{r lotr_homophily_model_anova}
+anova(lotr.homophily)
+```
+
+### [Nodal covariates: Main and Second-order Effects](http://statnet.org/Workshops/ergm_tutorial.html)
+
+Main effects and second-order (e.g. similarity or homophily effects) of node attributes can be incorporated into a `ergm` model with the terms `nodemain` and `nodematch`.  For example, we can evaluate whether gender has a "main" effect and subtype has a "second-order" effect on the formation of collaborative ties among people in the LotR network, while accounting for the effects of transitivity, with the following model specification.
+
+```{r lotr_specify_gwesp_model}
+lotr.ergm <- formula(lotr.s ~ gwesp(1, fixed = TRUE)
+   + nodemain("Gender") 
+   + nodematch("Subtype", diff=TRUE, levels=-c(4))
+   )
+
+# View the g(y) statistic for this model
+# Subtype levels: men hobbit elves dwarf ainur
+summary(lotr.ergm)
+```
+
+Here we fit the model with the `ergm` function.
+
+```{r lotr_fit_gwesp_model, message=FALSE}
+# , message=FALSE
+set.seed(619)
+lotr.ergm.fit <- ergm(lotr.ergm)
+lotr.ergm.fit
+```
+
+When dyad dependent terms are in the model, the computational algorithms in `ergm` use MCMC (with a Metropolis-Hastings sampler) to estimate the parameters.  For these models, it is important to assess model convergence before interpreting the model results – before evaluating statistical significance, interpreting coefficients, or assessing goodness of fit.  To do this, we use the function `mcmc.diagnostics`.
+
+```{r lotr_view_gwesp_model_mcmc_diagnostics}
+# View MCMC diagnostics
+mcmc.diagnostics(lotr.ergm.fit)
+```
+
+Here we view the model results.
+
+```{r lotr_view_gwesp_model_results}
+summary(lotr.ergm.fit)
+```
+
+By exponentiating the coefficients, they can be interpreted as a conditional log-odds ratio for interaction (ties) between people in the LotR network.  For example, being Female rather than Male decreases the odds of interaction by a factor of exp(-1.67) $\approx$ 0.19, or nearly 80% ("all else being equal").  Similarly, being of the same `Hobbit` Subtype increases the odds of interaction by a factor of exp(1.593) $\approx$ 4.92, or nearly 400%.  In addition, the coefficient and standard error for the alternating k-triangle statistic indicate there is evidence for a nontrivial transitivity effect.
+
+```{r lotr_ergm_model_coefficients}
+# Subtype levels: men hobbit elves dwarf ainur
+
+# Exponentiate the coefficients (conditional log-odds)
+exp(coef(lotr.ergm.fit))
+
+# Inverse-logit the coefficients (conditional probabilities)
+plogis(coef(lotr.ergm.fit))
+```
+
+The analysis of variance (ANOVA) table indicates that there is strong evidence that the variables used in the model explain the variation in network connectivity, with a decrease in residual deviance from 563 to 335 with only six variables.
+
+```{r assess_lotr}
+anova(lotr.ergm.fit)
+```
+
+To assess the goodness-of-fit of ERGMs, the current practice is to simulate many random graphs from the fitted model and then compare several summary statistics of these graphs to those of the original graph.  If the summary statistics of the original graph don't match the typical values of the fitted random graphs, then this suggests systematic differences between the model and the data and a lack of goodness-of-fit.
+
+```{r gof_lotr_ergm}
+gof.lotr.ergm <- gof(lotr.ergm.fit)
+gof.lotr.ergm
+```
+
+We can plot the results of the `gof` function.  The results show that the model fit is moderate.  The observed summary statistics are within the IQR of the simulated values in most cases (except for Subtype 3).
+
+```{r plot_lotr_ergm}
+# fig.width = 6, fig.asp = 0.618
+par(mfrow = c(2,2))
+plot(gof.lotr.ergm)
+```
+
+# References
+
+1. Filippo Menczer, Santo Fortunato, and Clayton Davis. [A First Course in Network Science](https://cambridgeuniversitypress.github.io/FirstCourseNetworkScience/). Cambridge University Press, 2020.
+
+2. Eric Kolaczyk and Gabor Csardi. [Statistical Analysis of Network Data with R, 2nd Edition](https://github.com/kolaczyk/sand). Springer, 2020.
+
+3. Mark Newman. [Networks, 2nd Edition](https://www.amazon.com/Networks-Mark-Newman-dp-0198805098/dp/0198805098/). Oxford University Press, 2018.
+
+4. Matthew Jackson. [Social and Economic Networks](https://www.coursera.org/learn/social-economic-networks). Princeton University Press, 2008.
+
+5. Matthew Jackson. [The Human Network: How Your Social Position Determines Your Power, Beliefs, and Behaviors](https://web.stanford.edu/~jacksonm/books.html). Vintage Books, 2020.
+
+6. David Easley and Jon Kleinberg. [Networks, Crowds, and Markets: Reasoning about a Highly Connected World](https://www.cs.cornell.edu/home/kleinber/networks-book/). Cambridge University Press, 2010.
