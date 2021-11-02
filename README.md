@@ -32,7 +32,7 @@ Javascript: [ODSC West 2021: Network Visualization](https://observablehq.com/@cl
 
 Let’s answer some intriguing business questions by using our network data! We’ll put our modeling skills to the test to analyze the relationship between our network characteristics and outcomes of interest. At the end of this lesson, you will be able to generate statistical models that incorporate network data to predict outcomes.
 
-Python: [ODSC West 2021: Network Modeling](https://colab.research.google.com/drive/1Tgu8Y8xzyYi0HgzRyzHiPAcAd1S6DBNR?usp=sharing)
+Python: [ODSC West 2021: Network Modeling.ipynb](https://colab.research.google.com/drive/1Tgu8Y8xzyYi0HgzRyzHiPAcAd1S6DBNR?usp=sharing)
 
 R: [ODSC West 2021: Network Modeling.Rmd](https://rpubs.com/cbrownley/odsc-west-2021-modeling-networks)
 
