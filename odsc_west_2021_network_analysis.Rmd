@@ -856,6 +856,42 @@ The *diameter* of a network is the maximum shortest path length across all pairs
 diameter(conn_comp, weights = NA)
 ```
 
+## Determine the eccentricity of the nodes in the largest connected component
+
+The *eccentricity* of a node v is the maximum distance from v to all other nodes in G.
+
+```{r cc_eccentricity}
+eccentricity(conn_comp)
+```
+
+## Determine the radius of the largest connected component
+
+The *radius* is the minimum eccentricity.
+
+```{r cc_radius}
+radius(conn_comp)
+```
+
+## Determine the nodes in the center of the largest connected component
+
+The *center* is the set of nodes with eccentricity equal to radius.
+
+```{r cc_center}
+in_center <- (eccentricity(conn_comp) == radius(conn_comp))
+
+eccentricity(conn_comp)[in_center]
+```
+
+## Determine the nodes in the periphery of the largest connected component
+
+The *periphery* is the set of nodes with eccentricity equal to the diameter.
+
+```{r cc_periphery}
+in_periphery <- (eccentricity(conn_comp) == diameter(conn_comp, weights = NA))
+
+eccentricity(conn_comp)[in_periphery]
+```
+
 ## Determine the average clustering coefficient of the graph
 
 The local clustering of each node in a graph G is the fraction of triangles that actually exist over all possible triangles in its neighborhood. The average clustering coefficient of a graph G is the mean of local clusterings.

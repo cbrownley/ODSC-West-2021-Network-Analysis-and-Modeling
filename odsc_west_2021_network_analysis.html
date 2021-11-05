@@ -533,10 +533,10 @@ G &lt;- graph_from_data_frame(my_edges, directed = FALSE, vertices = my_nodes)
 
 #print_all(G)
 G</code></pre>
-<pre><code>## IGRAPH a66463e UNWB 31 79 -- 
+<pre><code>## IGRAPH 4d3d47d UNWB 31 79 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), weight (e/n)
-## + edges from a66463e (vertex names):
+## + edges from 4d3d47d (vertex names):
 ##  [1] Frodo  --Sam     Frodo  --Gandalf Merry  --Pippin  Aragorn--Frodo  
 ##  [5] Frodo  --Gollum  Bilbo  --Frodo   Gandalf--Pippin  Aragorn--Gandalf
 ##  [9] Gollum --Sam     Frodo  --Pippin  Gimli  --Legolas Pippin --Sam    
@@ -558,7 +558,7 @@ gorder(G)</code></pre>
 <h2>List of nodes</h2>
 <pre class="r"><code># List all of the nodes
 V(G)</code></pre>
-<pre><code>## + 31/31 vertices, named, from a66463e:
+<pre><code>## + 31/31 vertices, named, from 4d3d47d:
 ##  [1] Aragorn   Arathorn  Arwen     Beregond  Bilbo     Bill      Boromir  
 ##  [8] Celeborn  Denethor  Elendil   Elrond    Éomer     Éowyn     Faramir  
 ## [15] Frodo     Galadriel Gandalf   Gimli     Glóin     Gollum    Isildur  
@@ -569,7 +569,7 @@ V(G)</code></pre>
 <h2>List neighbors of a node</h2>
 <pre class="r"><code># List neighbors of node &quot;Aragorn&quot;
 neighbors(G, &quot;Aragorn&quot;)</code></pre>
-<pre><code>## + 17/31 vertices, named, from a66463e:
+<pre><code>## + 17/31 vertices, named, from 4d3d47d:
 ##  [1] Arathorn Arwen    Boromir  Elendil  Elrond   Éomer    Faramir  Frodo   
 ##  [9] Gandalf  Gimli    Legolas  Merry    Pippin   Sam      Saruman  Sauron  
 ## [17] Théoden</code></pre>
@@ -642,7 +642,7 @@ ecount(G)</code></pre>
 <h2>List of edges</h2>
 <pre class="r"><code># List all of the edges
 E(G)</code></pre>
-<pre><code>## + 79/79 edges from a66463e (vertex names):
+<pre><code>## + 79/79 edges from 4d3d47d (vertex names):
 ##  [1] Frodo   --Sam       Frodo   --Gandalf   Merry   --Pippin   
 ##  [4] Aragorn --Frodo     Frodo   --Gollum    Bilbo   --Frodo    
 ##  [7] Gandalf --Pippin    Aragorn --Gandalf   Gollum  --Sam      
@@ -686,7 +686,7 @@ round( 2 * length(E(G)) / ( length(V(G)) * (length(V(G))-1) ), 2)</code></pre>
 <div id="specify-the-shortest-path-between-two-specific-nodes" class="section level2">
 <h2>Specify the <em>shortest path</em> between two specific nodes</h2>
 <pre class="r"><code>shortest_paths(G, &quot;Frodo&quot;, &quot;Arwen&quot;, weights = E(G, directed = FALSE)$weight)$vpath[[1]]</code></pre>
-<pre><code>## + 3/31 vertices, named, from a66463e:
+<pre><code>## + 3/31 vertices, named, from 4d3d47d:
 ## [1] Frodo  Elrond Arwen</code></pre>
 </div>
 <div id="determine-whether-the-network-is-connected" class="section level2">
@@ -960,10 +960,10 @@ title(&quot;LotR network&quot;)</code></pre>
 
 conn_comp &lt;- induced_subgraph(G, largest_cc)
 conn_comp</code></pre>
-<pre><code>## IGRAPH a7d3593 UNWB 29 78 -- 
+<pre><code>## IGRAPH a329c48 UNWB 29 78 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), subtype_color (v/c), gender_color (v/c), weight (e/n)
-## + edges from a7d3593 (vertex names):
+## + edges from a329c48 (vertex names):
 ##  [1] Frodo  --Sam     Frodo  --Gandalf Merry  --Pippin  Aragorn--Frodo  
 ##  [5] Frodo  --Gollum  Bilbo  --Frodo   Gandalf--Pippin  Aragorn--Gandalf
 ##  [9] Gollum --Sam     Frodo  --Pippin  Gimli  --Legolas Pippin --Sam    
@@ -994,7 +994,7 @@ gorder(conn_comp)</code></pre>
 <h2>List of nodes</h2>
 <pre class="r"><code># List all of the nodes
 V(conn_comp)</code></pre>
-<pre><code>## + 29/29 vertices, named, from a7d3593:
+<pre><code>## + 29/29 vertices, named, from a329c48:
 ##  [1] Aragorn   Arathorn  Arwen     Beregond  Bilbo     Bill      Boromir  
 ##  [8] Denethor  Elendil   Elrond    Éomer     Éowyn     Faramir   Frodo    
 ## [15] Gandalf   Gimli     Glóin     Gollum    Isildur   Legolas   Merry    
@@ -1005,7 +1005,7 @@ V(conn_comp)</code></pre>
 <h2>List neighbors of a node</h2>
 <pre class="r"><code># List neighbors of node &quot;Aragorn&quot;
 neighbors(conn_comp, &quot;Aragorn&quot;)</code></pre>
-<pre><code>## + 17/29 vertices, named, from a7d3593:
+<pre><code>## + 17/29 vertices, named, from a329c48:
 ##  [1] Arathorn Arwen    Boromir  Elendil  Elrond   Éomer    Faramir  Frodo   
 ##  [9] Gandalf  Gimli    Legolas  Merry    Pippin   Sam      Saruman  Sauron  
 ## [17] Théoden</code></pre>
@@ -1078,7 +1078,7 @@ ecount(conn_comp)</code></pre>
 <h2>List of edges</h2>
 <pre class="r"><code># List all of the edges
 E(conn_comp)</code></pre>
-<pre><code>## + 78/78 edges from a7d3593 (vertex names):
+<pre><code>## + 78/78 edges from a329c48 (vertex names):
 ##  [1] Frodo   --Sam       Frodo   --Gandalf   Merry   --Pippin   
 ##  [4] Aragorn --Frodo     Frodo   --Gollum    Bilbo   --Frodo    
 ##  [7] Gandalf --Pippin    Aragorn --Gandalf   Gollum  --Sam      
@@ -1122,7 +1122,7 @@ round( 2 * length(E(conn_comp)) / ( length(V(conn_comp)) * (length(V(conn_comp))
 <div id="specify-the-shortest-path-between-two-specific-nodes-1" class="section level2">
 <h2>Specify the <em>shortest path</em> between two specific nodes</h2>
 <pre class="r"><code>shortest_paths(conn_comp, &quot;Frodo&quot;, &quot;Arwen&quot;, weights = E(conn_comp, directed = FALSE)$weight)$vpath[[1]]</code></pre>
-<pre><code>## + 3/29 vertices, named, from a7d3593:
+<pre><code>## + 3/29 vertices, named, from a329c48:
 ## [1] Frodo  Elrond Arwen</code></pre>
 </div>
 <div id="determine-whether-the-network-is-connected-1" class="section level2">
@@ -1164,6 +1164,45 @@ clusters(conn_comp)</code></pre>
 <p>The <em>diameter</em> of a network is the maximum shortest path length across all pairs of nodes. That is, the length of the longest shortest path in the network.</p>
 <pre class="r"><code>diameter(conn_comp, weights = NA)</code></pre>
 <pre><code>## [1] 4</code></pre>
+</div>
+<div id="determine-the-eccentricity-of-the-nodes-in-the-largest-connected-component" class="section level2">
+<h2>Determine the eccentricity of the nodes in the largest connected component</h2>
+<p>The <em>eccentricity</em> of a node v is the maximum distance from v to all other nodes in G.</p>
+<pre class="r"><code>eccentricity(conn_comp)</code></pre>
+<pre><code>##   Aragorn  Arathorn     Arwen  Beregond     Bilbo      Bill   Boromir  Denethor 
+##         2         3         3         4         4         4         3         4 
+##   Elendil    Elrond     Éomer     Éowyn   Faramir     Frodo   Gandalf     Gimli 
+##         3         3         3         4         3         3         3         3 
+##     Glóin    Gollum   Isildur   Legolas     Merry    Pippin       Sam   Saruman 
+##         4         4         4         3         3         3         3         3 
+##    Sauron Shadowfax   Théoden  Bombadil Treebeard 
+##         3         4         3         4         4</code></pre>
+</div>
+<div id="determine-the-radius-of-the-largest-connected-component" class="section level2">
+<h2>Determine the radius of the largest connected component</h2>
+<p>The <em>radius</em> is the minimum eccentricity.</p>
+<pre class="r"><code>radius(conn_comp)</code></pre>
+<pre><code>## [1] 2</code></pre>
+</div>
+<div id="determine-the-nodes-in-the-center-of-the-largest-connected-component" class="section level2">
+<h2>Determine the nodes in the center of the largest connected component</h2>
+<p>The <em>center</em> is the set of nodes with eccentricity equal to radius.</p>
+<pre class="r"><code>in_center &lt;- (eccentricity(conn_comp) == radius(conn_comp))
+
+eccentricity(conn_comp)[in_center]</code></pre>
+<pre><code>## Aragorn 
+##       2</code></pre>
+</div>
+<div id="determine-the-nodes-in-the-periphery-of-the-largest-connected-component" class="section level2">
+<h2>Determine the nodes in the periphery of the largest connected component</h2>
+<p>The <em>periphery</em> is the set of nodes with eccentricity equal to the diameter.</p>
+<pre class="r"><code>in_periphery &lt;- (eccentricity(conn_comp) == diameter(conn_comp, weights = NA))
+
+eccentricity(conn_comp)[in_periphery]</code></pre>
+<pre><code>##  Beregond     Bilbo      Bill  Denethor     Éowyn     Glóin    Gollum   Isildur 
+##         4         4         4         4         4         4         4         4 
+## Shadowfax  Bombadil Treebeard 
+##         4         4         4</code></pre>
 </div>
 <div id="determine-the-average-clustering-coefficient-of-the-graph-1" class="section level2">
 <h2>Determine the average clustering coefficient of the graph</h2>
@@ -1858,10 +1897,10 @@ G_book1 &lt;- graph_from_data_frame(book1_edges, directed = FALSE, vertices = bo
 
 #print_all(G_book1)
 G_book1</code></pre>
-<pre><code>## IGRAPH a284e68 UNWB 12 24 -- 
+<pre><code>## IGRAPH 2ed80d2 UNWB 12 24 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), title (v/c), publication_date (v/c), weight (e/n)
-## + edges from a284e68 (vertex names):
+## + edges from 2ed80d2 (vertex names):
 ##  [1] Frodo  --Sam      Frodo  --Gandalf  Aragorn--Frodo    Bilbo  --Frodo   
 ##  [5] Frodo  --Pippin   Pippin --Sam      Frodo  --Merry    Merry  --Pippin  
 ##  [9] Aragorn--Sam      Bilbo  --Gandalf  Merry  --Sam      Boromir--Frodo   
@@ -1907,7 +1946,7 @@ G_book1</code></pre>
 <div id="check-that-the-undirected-edges-have-weights-1" class="section level2">
 <h2>Check that the undirected edges have weights</h2>
 <pre class="r"><code>E(G_book1)</code></pre>
-<pre><code>## + 24/24 edges from a284e68 (vertex names):
+<pre><code>## + 24/24 edges from 2ed80d2 (vertex names):
 ##  [1] Frodo  --Sam      Frodo  --Gandalf  Aragorn--Frodo    Bilbo  --Frodo   
 ##  [5] Frodo  --Pippin   Pippin --Sam      Frodo  --Merry    Merry  --Pippin  
 ##  [9] Aragorn--Sam      Bilbo  --Gandalf  Merry  --Sam      Boromir--Frodo   
@@ -1925,10 +1964,10 @@ G_book1</code></pre>
 
 G_book1_cc &lt;- induced_subgraph(G_book1, book1_largest_cc)
 G_book1_cc</code></pre>
-<pre><code>## IGRAPH 7352b30 UNWB 12 24 -- 
+<pre><code>## IGRAPH 861a165 UNWB 12 24 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), title (v/c), publication_date (v/c), weight (e/n)
-## + edges from 7352b30 (vertex names):
+## + edges from 861a165 (vertex names):
 ##  [1] Frodo  --Sam      Frodo  --Gandalf  Aragorn--Frodo    Bilbo  --Frodo   
 ##  [5] Frodo  --Pippin   Pippin --Sam      Frodo  --Merry    Merry  --Pippin  
 ##  [9] Aragorn--Sam      Bilbo  --Gandalf  Merry  --Sam      Boromir--Frodo   
@@ -2136,10 +2175,10 @@ G_book2 &lt;- graph_from_data_frame(book2_edges, directed = FALSE, vertices = bo
 
 #print_all(G_book2)
 G_book2</code></pre>
-<pre><code>## IGRAPH c301efc UNWB 16 21 -- 
+<pre><code>## IGRAPH a6f2f1d UNWB 16 21 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), title (v/c), publication_date (v/c), weight (e/n)
-## + edges from c301efc (vertex names):
+## + edges from a6f2f1d (vertex names):
 ##  [1] Frodo  --Sam       Gollum --Sam       Frodo  --Gollum    Merry  --Pippin   
 ##  [5] Gimli  --Legolas   Gandalf--Saruman   Gandalf--Théoden   Faramir--Frodo    
 ##  [9] Aragorn--Gandalf   Aragorn--Legolas   Aragorn--Gimli     Gandalf--Treebeard
@@ -2186,7 +2225,7 @@ G_book2</code></pre>
 <div id="check-that-the-undirected-edges-have-weights-2" class="section level2">
 <h2>Check that the undirected edges have weights</h2>
 <pre class="r"><code>E(G_book2)</code></pre>
-<pre><code>## + 21/21 edges from c301efc (vertex names):
+<pre><code>## + 21/21 edges from a6f2f1d (vertex names):
 ##  [1] Frodo  --Sam       Gollum --Sam       Frodo  --Gollum    Merry  --Pippin   
 ##  [5] Gimli  --Legolas   Gandalf--Saruman   Gandalf--Théoden   Faramir--Frodo    
 ##  [9] Aragorn--Gandalf   Aragorn--Legolas   Aragorn--Gimli     Gandalf--Treebeard
@@ -2204,10 +2243,10 @@ G_book2</code></pre>
 
 G_book2_cc &lt;- induced_subgraph(G_book2, book2_largest_cc)
 G_book2_cc</code></pre>
-<pre><code>## IGRAPH 83b148d UNWB 11 15 -- 
+<pre><code>## IGRAPH 9b4b151 UNWB 11 15 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), title (v/c), publication_date (v/c), weight (e/n)
-## + edges from 83b148d (vertex names):
+## + edges from 9b4b151 (vertex names):
 ##  [1] Merry  --Pippin    Gimli  --Legolas   Gandalf--Saruman   Gandalf--Théoden  
 ##  [5] Aragorn--Gandalf   Aragorn--Legolas   Aragorn--Gimli     Gandalf--Treebeard
 ##  [9] Merry  --Treebeard Gandalf--Legolas   Gandalf--Pippin    Pippin --Treebeard
@@ -2409,10 +2448,10 @@ G_book3 &lt;- graph_from_data_frame(book3_edges, directed = FALSE, vertices = bo
 
 #print_all(G_book3)
 G_book3</code></pre>
-<pre><code>## IGRAPH af126df UNWB 13 19 -- 
+<pre><code>## IGRAPH 823e31b UNWB 13 19 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), title (v/c), publication_date (v/c), weight (e/n)
-## + edges from af126df (vertex names):
+## + edges from 823e31b (vertex names):
 ##  [1] Frodo   --Sam     Gandalf --Pippin  Merry   --Pippin  Aragorn --Gandalf
 ##  [5] Denethor--Gandalf Denethor--Pippin  Gimli   --Legolas Aragorn --Gimli  
 ##  [9] Beregond--Pippin  Frodo   --Pippin  Aragorn --Legolas Aragorn --Éomer  
@@ -2458,7 +2497,7 @@ G_book3</code></pre>
 <div id="check-that-the-undirected-edges-have-weights-3" class="section level2">
 <h2>Check that the undirected edges have weights</h2>
 <pre class="r"><code>E(G_book3)</code></pre>
-<pre><code>## + 19/19 edges from af126df (vertex names):
+<pre><code>## + 19/19 edges from 823e31b (vertex names):
 ##  [1] Frodo   --Sam     Gandalf --Pippin  Merry   --Pippin  Aragorn --Gandalf
 ##  [5] Denethor--Gandalf Denethor--Pippin  Gimli   --Legolas Aragorn --Gimli  
 ##  [9] Beregond--Pippin  Frodo   --Pippin  Aragorn --Legolas Aragorn --Éomer  
@@ -2474,10 +2513,10 @@ G_book3</code></pre>
 
 G_book3_cc &lt;- induced_subgraph(G_book3, book3_largest_cc)
 G_book3_cc</code></pre>
-<pre><code>## IGRAPH e0883f7 UNWB 13 19 -- 
+<pre><code>## IGRAPH 89cecdf UNWB 13 19 -- 
 ## + attr: name (v/c), type (v/c), subtype (v/c), gender (v/c), volume
 ## | (v/c), title (v/c), publication_date (v/c), weight (e/n)
-## + edges from e0883f7 (vertex names):
+## + edges from 89cecdf (vertex names):
 ##  [1] Frodo   --Sam     Gandalf --Pippin  Merry   --Pippin  Aragorn --Gandalf
 ##  [5] Denethor--Gandalf Denethor--Pippin  Gimli   --Legolas Aragorn --Gimli  
 ##  [9] Beregond--Pippin  Frodo   --Pippin  Aragorn --Legolas Aragorn --Éomer  
