@@ -15,6 +15,7 @@ Install [igraph](https://igraph.org/r/) and some additional packages to process 
 
 ```{r install_packages, message=FALSE}
 # ,echo=FALSE, include=FALSE
+# install.packages("statnet")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load("ape",
                "d3r", 
@@ -27,7 +28,7 @@ pacman::p_load("ape",
                "purrr",
                "RColorBrewer", 
                "sand",
-               "sqldf", 
+               "sqldf",
                "wrapr")
 ```
 
@@ -1001,57 +1002,117 @@ ggplot(data = cc_degree_centralities, aes(x = reorder(Character, -Centrality),
         axis.text.x = element_text(angle = 90))
 ```
 
-## Clustering coefficient (Transitivity)
+## Eigenvector centrality
 
-The clustering coefficient (transitivity) of a node is the fraction of pairs of the node's neighbors that are connected to each other.  In a social network we can rephrase this definition as -- the clustering coefficient for a person is the fraction of pairs of the person's connections that are connected to each other.  The connectivity among neighbors of nodes is an important feature of local structure because it indicates the extent to which the nodes are tightly knit, or clustered.
+Eigenvector centrality is based on the notions of "status" or "prestige" or "rank".  It's based on the idea that a node is more central if its neighbors are more central.  The definitions of this measure are inherently implicit and can be conveyed as eigenvector solutions of linear systems of equations.  
+
+One such definition by Bonacich, in which the centrality of a node is proportional to the sum of the cetnrality of its neighbors, is:
 
 \begin{align}
-clustering_i = \frac{\tau(i)}{\tau_{max}(i)} = \frac{2\tau(i)}{k_i(k_i - 1)}
+\lambda C_i^e(g) = \sum_j g_{ij} C_j^e(g)
 \end{align}
 
-where $\tau(i)$ is the number of triangles involving i.  Nodes with degree k < 2 are excluded when calculating the average clustering coefficient.
+where $C^e(g)$ denotes the eigenvector centrality associated with a network g and $\lambda$ is a proportionality factor.
 
-By averaging the clustering coefficient across the nodes, we can calculate a clustering coefficient for the entire network.  A low clustering coefficient (near zero) indicates the network has few triangles, whereas a high clustering coefficient indicates it has many triangles.  Social networks tend to have high clustering coefficients.
+When the network is undirected and connected, the largest eigenvalue will be simple and its eigenvector will have entries that are all nonzero and share the same sign.  Convention is to report the absolute values of these entries, which will automatically lie between 0 and 1.
 
-```{r clustering_coefficient}
-# weights = E(conn_comp, directed = FALSE)$weight,
-V(conn_comp)$clustering_coefficient <- transitivity(conn_comp, 
-                                                    type="local", 
-                                                    vids = NULL, # V(conn_comp), 
-                                                    weights = NULL,
-                                                    isolates = "zero")
+```{r eigenvector_centrality}
+# weights = E(conn_comp, directed = FALSE)$weight, 
+V(conn_comp)$eigenvector_centrality <- eigen_centrality(conn_comp,
+                                                        directed = FALSE, 
+                                                        weights = NA,
+                                                        scale = FALSE)$vector # [["vector"]]
 
-as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
+as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
   mutate_if(is.numeric, round, 4) %>%
-  arrange(desc(clustering_coefficient))
+  arrange(desc(eigenvector_centrality))
 ```
 
-```{r cc_clustering_coefficient_plot}
-# weights = E(conn_comp, directed = FALSE)$weight,
-V(conn_comp)$clustering_coefficient <- transitivity(conn_comp, 
-                                                    type="local", 
-                                                    vids = NULL, 
-                                                    weights = NULL,
-                                                    isolates = "zero")
+```{r cc_eigenvector_centrality_plot}
+V(conn_comp)$eigenvector_centrality <- eigen_centrality(conn_comp,
+                                                        directed = FALSE, 
+                                                        weights = NA,
+                                                        scale = FALSE)$vector # [["vector"]]
 
 # Arrange nodes alphabetically
-# as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
+# as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
 #   arrange(name)
 
-# Arrange nodes in descending order of clustering centrality
-cc_clustering_coefficients <- as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
-  rename(Character = name, Centrality = clustering_coefficient) %>%
+# Arrange nodes in descending order of eigenvector centrality
+cc_eigenvector_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
+  rename(Character = name, Centrality = eigenvector_centrality) %>%
   arrange(desc(Centrality))
 
-ggplot(data = cc_clustering_coefficients, aes(x = reorder(Character, -Centrality), 
-                                              y = Centrality)) +
+ggplot(data = cc_eigenvector_centralities, aes(x = reorder(Character, -Centrality), 
+                                             y = Centrality)) +
   geom_col(aes(fill = Centrality)) +
-  scale_color_distiller(palette = "Reds", 
+  scale_color_distiller(palette = "Blues", 
                         direction = 1, 
                         aesthetics = c("colour", "fill")) +
-  scale_y_continuous(breaks=seq(0, 1.0, 0.2), limits = c(0, 1.0)) +
-  # ylim(0, 1.2) +
-  labs(title = "Clustering Centralities of LotR Characters") +
+  scale_y_continuous(breaks=seq(0, 0.4, 0.05)) +
+  # ylim(0, 1) +
+  labs(title = "Eigenvector Centralities of LotR Characters") +
+  xlab("Character") +
+  theme_light() + 
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        plot.title  = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 90))
+```
+
+## PageRank
+
+PageRank is an algorithm to compute a centrality measure that attempts to capture the "status" or "prestige" or "rank" of each node by imagining people carrying out modified random walk processes (random surfing plus jumping) for a long time and measuring the fraction of times they visit each node.  Nodes with many paths leading to them are visited more often by random surfers, and therefore have high PageRank.
+
+PageRank can be computed with an iterative approach called the *power method* (although there are newer / alternative methods).  With the *power method*, the PageRank of node *i* at time *t* is the sum of two terms that convey the two ways one can arrive at node *i*:
+
+\begin{align}
+R_t(i) = \frac{\alpha}{N} + (1 - \alpha) \sum_{j \in pred(i)} \frac{R_{t-1}(j)}{k_{out}(j)}
+\end{align}
+
+The first term conveys teleportation to node *i*, which is one of N possible targets of a jump.  The second term conveys how someone can travel along one of the edges to node *i* during the random walk.
+
+The definition is recursive: the PageRank of a node depends on that of its neighbors.  For $\alpha > 0$, PageRank is guaranteed to converge, even in very large networks.
+
+```{r page_rank}
+# weights = E(conn_comp,directed = FALSE)$weight
+V(conn_comp)$pagerank <- page_rank(conn_comp,
+                                   algo = "prpack",
+                                   directed = FALSE,
+                                   damping = 0.9,
+                                   weights = NA)$vector # [["vector"]]
+
+as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank")]) %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(desc(pagerank))
+```
+
+```{r cc_pagerank_centrality_plot}
+V(conn_comp)$pagerank_centrality <- page_rank(conn_comp,
+                                              algo = "prpack",
+                                              directed = FALSE,
+                                              damping = 0.9,
+                                              weights = NA)$vector # [["vector"]]
+
+# Arrange nodes alphabetically
+# as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank_centrality")]) %>%
+#   arrange(name)
+
+# Arrange nodes in descending order of pagerank centrality
+cc_pagerank_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank_centrality")]) %>%
+  rename(Character = name, Centrality = pagerank_centrality) %>%
+  arrange(desc(Centrality))
+
+ggplot(data = cc_pagerank_centralities, aes(x = reorder(Character, -Centrality), 
+                                            y = Centrality)) +
+  geom_col(aes(fill = Centrality)) +
+  scale_color_distiller(palette = "Greys", 
+                        direction = 1, 
+                        aesthetics = c("colour", "fill")) +
+  scale_y_continuous(breaks=seq(0, 0.15, 0.02)) +
+  # ylim(0, 1) +
+  labs(title = "PageRank Centralities of LotR Characters") +
   xlab("Character") +
   theme_light() + 
   theme(legend.position = "none",
@@ -1179,117 +1240,57 @@ ggplot(data = cc_betweenness_centralities, aes(x = reorder(Character, -Centralit
         axis.text.x = element_text(angle = 90))
 ```
 
-## Eigenvector centrality
+## Clustering coefficient (Transitivity)
 
-Eigenvector centrality is based on the notions of "status" or "prestige" or "rank".  It's based on the idea that a node is more central if its neighbors are more central.  The definitions of this measure are inherently implicit and can be conveyed as eigenvector solutions of linear systems of equations.  
-
-One such definition by Bonacich, in which the centrality of a node is proportional to the sum of the cetnrality of its neighbors, is:
+The clustering coefficient (transitivity) of a node is the fraction of pairs of the node's neighbors that are connected to each other.  In a social network we can rephrase this definition as -- the clustering coefficient for a person is the fraction of pairs of the person's connections that are connected to each other.  The connectivity among neighbors of nodes is an important feature of local structure because it indicates the extent to which the nodes are tightly knit, or clustered.
 
 \begin{align}
-\lambda C_i^e(g) = \sum_j g_{ij} C_j^e(g)
+clustering_i = \frac{\tau(i)}{\tau_{max}(i)} = \frac{2\tau(i)}{k_i(k_i - 1)}
 \end{align}
 
-where $C^e(g)$ denotes the eigenvector centrality associated with a network g and $\lambda$ is a proportionality factor.
+where $\tau(i)$ is the number of triangles involving i.  Nodes with degree k < 2 are excluded when calculating the average clustering coefficient.
 
-When the network is undirected and connected, the largest eigenvalue will be simple and its eigenvector will have entries that are all nonzero and share the same sign.  Convention is to report the absolute values of these entries, which will automatically lie between 0 and 1.
+By averaging the clustering coefficient across the nodes, we can calculate a clustering coefficient for the entire network.  A low clustering coefficient (near zero) indicates the network has few triangles, whereas a high clustering coefficient indicates it has many triangles.  Social networks tend to have high clustering coefficients.
 
-```{r eigenvector_centrality}
-# weights = E(conn_comp, directed = FALSE)$weight, 
-V(conn_comp)$eigenvector_centrality <- eigen_centrality(conn_comp,
-                                                        directed = FALSE, 
-                                                        weights = NA,
-                                                        scale = FALSE)$vector # [["vector"]]
+```{r clustering_coefficient}
+# weights = E(conn_comp, directed = FALSE)$weight,
+V(conn_comp)$clustering_coefficient <- transitivity(conn_comp, 
+                                                    type="local", 
+                                                    vids = NULL, # V(conn_comp), 
+                                                    weights = NULL,
+                                                    isolates = "zero")
 
-as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
+as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
   mutate_if(is.numeric, round, 4) %>%
-  arrange(desc(eigenvector_centrality))
+  arrange(desc(clustering_coefficient))
 ```
 
-```{r cc_eigenvector_centrality_plot}
-V(conn_comp)$eigenvector_centrality <- eigen_centrality(conn_comp,
-                                                        directed = FALSE, 
-                                                        weights = NA,
-                                                        scale = FALSE)$vector # [["vector"]]
+```{r cc_clustering_coefficient_plot}
+# weights = E(conn_comp, directed = FALSE)$weight,
+V(conn_comp)$clustering_coefficient <- transitivity(conn_comp, 
+                                                    type="local", 
+                                                    vids = NULL, 
+                                                    weights = NULL,
+                                                    isolates = "zero")
 
 # Arrange nodes alphabetically
-# as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
+# as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
 #   arrange(name)
 
-# Arrange nodes in descending order of eigenvector centrality
-cc_eigenvector_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "eigenvector_centrality")]) %>%
-  rename(Character = name, Centrality = eigenvector_centrality) %>%
+# Arrange nodes in descending order of clustering centrality
+cc_clustering_coefficients <- as_tibble(vertex.attributes(conn_comp)[c("name", "clustering_coefficient")]) %>%
+  rename(Character = name, Centrality = clustering_coefficient) %>%
   arrange(desc(Centrality))
 
-ggplot(data = cc_eigenvector_centralities, aes(x = reorder(Character, -Centrality), 
-                                             y = Centrality)) +
+ggplot(data = cc_clustering_coefficients, aes(x = reorder(Character, -Centrality), 
+                                              y = Centrality)) +
   geom_col(aes(fill = Centrality)) +
-  scale_color_distiller(palette = "Blues", 
+  scale_color_distiller(palette = "Reds", 
                         direction = 1, 
                         aesthetics = c("colour", "fill")) +
-  scale_y_continuous(breaks=seq(0, 0.4, 0.05)) +
-  # ylim(0, 1) +
-  labs(title = "Eigenvector Centralities of LotR Characters") +
-  xlab("Character") +
-  theme_light() + 
-  theme(legend.position = "none",
-        panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(), 
-        plot.title  = element_text(hjust = 0.5), 
-        axis.text.x = element_text(angle = 90))
-```
-
-## PageRank
-
-PageRank is an algorithm to compute a centrality measure that attempts to capture the "status" or "prestige" or "rank" of each node by imagining people carrying out modified random walk processes (random surfing plus jumping) for a long time and measuring the fraction of times they visit each node.  Nodes with many paths leading to them are visited more often by random surfers, and therefore have high PageRank.
-
-PageRank can be computed with an iterative approach called the *power method* (although there are newer / alternative methods).  With the *power method*, the PageRank of node *i* at time *t* is the sum of two terms that convey the two ways one can arrive at node *i*:
-
-\begin{align}
-R_t(i) = \frac{\alpha}{N} + (1 - \alpha) \sum_{j \in pred(i)} \frac{R_{t-1}(j)}{k_{out}(j)}
-\end{align}
-
-The first term conveys teleportation to node *i*, which is one of N possible targets of a jump.  The second term conveys how someone can travel along one of the edges to node *i* during the random walk.
-
-The definition is recursive: the PageRank of a node depends on that of its neighbors.  For $\alpha > 0$, PageRank is guaranteed to converge, even in very large networks.
-
-```{r page_rank}
-# weights = E(conn_comp,directed = FALSE)$weight
-V(conn_comp)$pagerank <- page_rank(conn_comp,
-                                   algo = "prpack",
-                                   directed = FALSE,
-                                   damping = 0.9,
-                                   weights = NA)$vector # [["vector"]]
-
-as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank")]) %>%
-  mutate_if(is.numeric, round, 4) %>%
-  arrange(desc(pagerank))
-```
-
-```{r cc_pagerank_centrality_plot}
-V(conn_comp)$pagerank_centrality <- page_rank(conn_comp,
-                                              algo = "prpack",
-                                              directed = FALSE,
-                                              damping = 0.9,
-                                              weights = NA)$vector # [["vector"]]
-
-# Arrange nodes alphabetically
-# as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank_centrality")]) %>%
-#   arrange(name)
-
-# Arrange nodes in descending order of pagerank centrality
-cc_pagerank_centralities <- as_tibble(vertex.attributes(conn_comp)[c("name", "pagerank_centrality")]) %>%
-  rename(Character = name, Centrality = pagerank_centrality) %>%
-  arrange(desc(Centrality))
-
-ggplot(data = cc_pagerank_centralities, aes(x = reorder(Character, -Centrality), 
-                                            y = Centrality)) +
-  geom_col(aes(fill = Centrality)) +
-  scale_color_distiller(palette = "Greys", 
-                        direction = 1, 
-                        aesthetics = c("colour", "fill")) +
-  scale_y_continuous(breaks=seq(0, 0.15, 0.02)) +
-  # ylim(0, 1) +
-  labs(title = "PageRank Centralities of LotR Characters") +
+  scale_y_continuous(breaks=seq(0, 1.0, 0.2), limits = c(0, 1.0)) +
+  # ylim(0, 1.2) +
+  labs(title = "Clustering Centralities of LotR Characters") +
   xlab("Character") +
   theme_light() + 
   theme(legend.position = "none",

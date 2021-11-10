@@ -15,6 +15,7 @@ Install [`sand`](https://github.com/kolaczyk/sand) and some additional packages 
 
 ```{r install_packages, message=FALSE}
 # ,echo=FALSE, include=FALSE
+# install.packages("statnet")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load("ape",
                "d3r", 
