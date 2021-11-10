@@ -18,6 +18,7 @@ Install [`sand`](https://github.com/kolaczyk/sand) and some additional packages 
 # install.packages("statnet")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load("ape",
+               "broom",
                "d3r", 
                "ergm",
                "ggplot2",
@@ -39,6 +40,7 @@ Load [`sand`](https://github.com/kolaczyk/sand) and some additional packages to 
 ```{r load_packages, message=FALSE}
 # ,echo=FALSE, include=FALSE
 library("ape")
+library("broom")
 library("d3r")
 library("ergm")
 library("ggplot2")
@@ -416,6 +418,9 @@ lotr.bern <- ergm(lotr.s ~ edges)
 
 # View the fitted model object
 summary(lotr.bern)
+
+tidy(lotr.bern)
+glance(lotr.bern)
 ```
 
 This simple model specifies a single homogeneous probability for all ties, which is captured by the coefficient of the `edges` term. We can interpret this coefficient by returning to the logit form of the ERGM. The log-odds that a tie is present is
@@ -484,6 +489,9 @@ lotr.homophily <- ergm(lotr.hom.formula) #control=control.ergm(MCMLE.maxit = 30)
 
 # View the model results
 summary(lotr.homophily)
+
+tidy(lotr.homophily)
+glance(lotr.homophily)
 ```
 
 By exponentiating the coefficients, they can be interpreted as a conditional log-odds ratio for interaction (ties) between people in the LotR network.  For example, being Hobbit rather than Men increases the odds of interaction by a factor of exp(1.0137) $\approx$ 2.76, or over 175% ("all else being equal").  Similarly, being of the same Subtype increases the odds of interaction by a factor of exp(1.275) $\approx$ 3.58, or over 250%.
@@ -539,6 +547,9 @@ Here we view the model results.
 
 ```{r lotr_view_gwesp_model_results}
 summary(lotr.ergm.fit)
+
+tidy(lotr.ergm.fit)
+glance(lotr.ergm.fit)
 ```
 
 By exponentiating the coefficients, they can be interpreted as a conditional log-odds ratio for interaction (ties) between people in the LotR network.  For example, being Female rather than Male decreases the odds of interaction by a factor of exp(-1.67) $\approx$ 0.19, or nearly 80% ("all else being equal").  Similarly, being of the same `Hobbit` Subtype increases the odds of interaction by a factor of exp(1.593) $\approx$ 4.92, or nearly 400%.  In addition, the coefficient and standard error for the alternating k-triangle statistic indicate there is evidence for a nontrivial transitivity effect.
