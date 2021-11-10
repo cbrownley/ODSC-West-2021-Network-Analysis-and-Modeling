@@ -443,13 +443,18 @@ This probability corresponds to the density we observe in the `LotR` network: th
 Subtype may be associated with the connections in this network.  We can use `ergm` to test this.  Subtype is a discrete attribute, so we use the ergm-term `nodematch` to investigate homophily in connections by Subtype.
 
 ```{r lotr_specify_homophily_model}
-# Frequencies of Subtype
-table(lotr.s %v% "Subtype")
+ordered_subtypes <- c("men", "hobbit", "elves", "dwarf", "ainur")
 
+# Frequencies of Subtype
+subtypes_tbl <- table(lotr.s %v% "Subtype")
+names(subtypes_tbl) <- ordered_subtypes
+subtypes_tbl
 
 # View ties between Subtype categories
-mixingmatrix(lotr.s, "Subtype")
-
+subtypes_mm <- mixingmatrix(lotr.s, "Subtype")
+colnames(subtypes_mm) <- ordered_subtypes
+rownames(subtypes_mm) <- ordered_subtypes
+subtypes_mm
 
 # View the g(y) statistic for this model
 # When diff=FALSE, this term adds one network statistic to the model, 
