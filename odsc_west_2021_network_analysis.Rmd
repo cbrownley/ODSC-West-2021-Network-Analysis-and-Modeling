@@ -308,6 +308,37 @@ G <- graph_from_data_frame(my_edges, directed = FALSE, vertices = my_nodes)
 G
 ```
 
+# Plot the nodes of the LotR network
+
+```{r G_plot_nodes}
+set.seed(10)
+igraph_options(vertex.size=6, 
+               vertex.color="blue", 
+               vertex.frame.color="blue",
+               vertex.label=NA, # V(G)$name, 
+               edge.color=NA)
+par(mfrow=c(1,1))
+plot(G, layout=layout_randomly) # layout_nicely
+title("LotR network (no edges!)")
+```
+
+# Plot the nodes and edges of the LotR network
+
+```{r G_plot_nodes_and_edges}
+e.size <- 4 * E(G)$weight / max( E(G)$weight, na.rm = TRUE )
+
+set.seed(10)
+igraph_options(vertex.size=6, 
+               vertex.color="blue", 
+               vertex.frame.color="blue",
+               vertex.label=NA, # V(G)$name,
+               edge.width=e.size, 
+               edge.color="blue")
+par(mfrow=c(1,1))
+plot(G, layout=layout_randomly) # layout_nicely
+title("LotR network")
+```
+
 ## Number of nodes
 
 Sometimes the number of vertices (also called nodes) in a graph is called the `order` of the graph.  We can get the number of nodes in a graph with `gorder(G)`.
@@ -624,37 +655,6 @@ vertex.attributes(G)
 # E(G)
 
 edge.attributes(G)
-```
-
-# Plot the nodes of the LotR network
-
-```{r G_plot_nodes}
-set.seed(10)
-igraph_options(vertex.size=8, 
-               vertex.color="blue", 
-               vertex.frame.color="blue",
-               vertex.label=NA, 
-               edge.color=NA)
-par(mfrow=c(1,1))
-plot(G, layout=layout_randomly)
-title("LotR network (no edges!)")
-```
-
-# Plot the nodes and weighted edges of the LotR network
-
-```{r G_plot_nodes_and_edges}
-e.size <- 8 * E(G)$weight / max( E(G)$weight, na.rm = TRUE )
-
-set.seed(10)
-igraph_options(vertex.size=8, 
-               vertex.color="blue", 
-               vertex.frame.color="blue",
-               vertex.label=NA, 
-               edge.width=e.size, 
-               edge.color="blue")
-par(mfrow=c(1,1))
-plot(G, layout=layout_randomly)
-title("LotR network")
 ```
 
 # Create a new network graph that only consists of the largest connected component
